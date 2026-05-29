@@ -4,6 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.utils.logger import setup_logging, get_logger
+
+setup_logging(debug=settings.debug)
+logger = get_logger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -25,6 +29,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    async def startup_event() -> None:
+        logger.info("Starting Expert Room API", version="0.1.0", debug=settings.debug)
+
+    @app.on_event("shutdown")
+    async def shutdown_event() -> None:
+        logger.info("Shutting down Expert Room API")
 
     @app.get("/api/health")
     async def health_check() -> dict[str, str]:
