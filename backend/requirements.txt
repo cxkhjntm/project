@@ -1,0 +1,19 @@
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+sqlalchemy[asyncio]>=2.0.25
+alembic>=1.13.1
+aiosqlite>=0.19.0
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+structlog>=24.1.0
+httpx>=0.26.0
+sse-starlette>=1.8.2
+cryptography>=42.0.2
+python-multipart>=0.0.6
+chardet>=5.2.0
+
+# Dev dependencies
+pytest>=7.4.4
+pytest-asyncio>=0.23.3
+ruff>=0.1.14
+mypy>=1.8.0
