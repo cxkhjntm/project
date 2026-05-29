@@ -11,9 +11,3 @@ sse-starlette>=1.8.2
 cryptography>=42.0.2
 python-multipart>=0.0.6
 chardet>=5.2.0
-
-# Dev dependencies
-pytest>=7.4.4
-pytest-asyncio>=0.23.3
-ruff>=0.1.14
-mypy>=1.8.0

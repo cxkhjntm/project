@@ -17,6 +17,7 @@ def create_app() -> FastAPI:
     )
 
     # CORS configuration for frontend
+    # TODO: Tighten allow_methods and allow_headers before production
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

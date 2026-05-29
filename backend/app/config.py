@@ -12,3 +12,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+__all__ = ["Settings", "settings"]
