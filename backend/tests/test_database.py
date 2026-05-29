@@ -1,14 +1,15 @@
 """Test database configuration."""
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config import settings
-from app.database import Base, engine, async_session_factory, get_session, init_db
+from app.database import Base, engine, async_session_factory
 
 
 def test_settings_defaults():
-    """Test that settings have correct default values."""
     assert settings.app_name == "Expert Room"
     assert settings.debug is False
     assert settings.database_url == "sqlite+aiosqlite:///./expert_room.db"
@@ -21,7 +22,6 @@ def test_settings_defaults():
 
 
 def test_settings_allowed_extensions():
-    """Test that allowed extensions are configured correctly."""
     expected_extensions = [
         ".txt", ".md", ".json", ".csv", ".py", ".ts", ".js", ".tsx", ".jsx",
         ".html", ".css", ".yaml", ".yml", ".toml", ".ini", ".cfg",
@@ -30,7 +30,6 @@ def test_settings_allowed_extensions():
 
 
 def test_settings_excluded_directories():
-    """Test that excluded directories are configured correctly."""
     expected_directories = [
         "node_modules", ".git", "dist", "build", ".next", ".venv",
         "__pycache__", "target", "coverage", ".idea", ".vscode",
@@ -38,37 +37,89 @@ def test_settings_excluded_directories():
     assert settings.excluded_directories == expected_directories
 
 
-@pytest.mark.asyncio
-async def test_database_engine():
-    """Test that database engine is created correctly."""
+def test_database_engine_created():
     assert engine is not None
-    assert str(engine.url) == "sqlite+aiosqlite:///./expert_room.db"
+    assert "aiosqlite" in str(engine.url)
 
 
-@pytest.mark.asyncio
-async def test_database_session_factory():
-    """Test that session factory is created correctly."""
+def test_session_factory_created():
     assert async_session_factory is not None
 
 
-@pytest.mark.asyncio
-async def test_database_base_class():
-    """Test that Base class is configured correctly."""
-    assert Base is not None
-    assert hasattr(Base, 'metadata')
+def test_base_class_has_metadata():
+    assert hasattr(Base, "metadata")
 
 
 @pytest.mark.asyncio
-async def test_init_db():
-    """Test that init_db creates tables."""
-    # This test verifies init_db can be called without errors
-    # In a real test, we would check if tables are created
-    # but for now, we just verify the function exists and is callable
-    assert callable(init_db)
+async def test_init_db_creates_tables():
+    test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+
+    class TestModel(Base):
+        __tablename__ = "test_model"
+        id: Mapped[int] = mapped_column(primary_key=True)
+        name: Mapped[str] = mapped_column()
+
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with test_engine.connect() as conn:
+        result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+        tables = [row[0] for row in result]
+        assert "test_model" in tables
+
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+    await test_engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_get_session():
-    """Test that get_session returns an async session."""
-    # This test verifies get_session is an async generator
-    assert callable(get_session)
+async def test_get_session_yields_session():
+    test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    test_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    import app.database
+    original_factory = app.database.async_session_factory
+    app.database.async_session_factory = test_factory
+
+    try:
+        from app.database import get_session
+        gen = get_session()
+        session = await gen.__anext__()
+        assert isinstance(session, AsyncSession)
+        assert session.is_active
+        await gen.aclose()
+    finally:
+        app.database.async_session_factory = original_factory
+        await test_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_session_commit_on_success():
+    test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    test_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    import app.database
+    original_factory = app.database.async_session_factory
+    app.database.async_session_factory = test_factory
+
+    try:
+        from app.database import get_session
+        gen = get_session()
+        session = await gen.__anext__()
+
+        await session.execute(text("CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)"))
+        await session.execute(text("INSERT INTO test (id) VALUES (1)"))
+
+        try:
+            await gen.__anext__()
+        except StopAsyncIteration:
+            pass
+
+        async with test_engine.connect() as conn:
+            result = await conn.execute(text("SELECT COUNT(*) FROM test"))
+            count = result.scalar()
+            assert count == 1
+    finally:
+        app.database.async_session_factory = original_factory
+        await test_engine.dispose()

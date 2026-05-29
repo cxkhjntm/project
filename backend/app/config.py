@@ -1,8 +1,5 @@
 """Application configuration using pydantic-settings."""
 
-from pathlib import Path
-from typing import List
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./expert_room.db"
 
     # CORS
-    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # Security
     encryption_key: str = ""  # AES key for API key encryption
@@ -35,11 +32,11 @@ class Settings(BaseSettings):
 
     # File processing
     max_file_size_mb: int = 10
-    allowed_extensions: List[str] = [
+    allowed_extensions: list[str] = [
         ".txt", ".md", ".json", ".csv", ".py", ".ts", ".js", ".tsx", ".jsx",
         ".html", ".css", ".yaml", ".yml", ".toml", ".ini", ".cfg",
     ]
-    excluded_directories: List[str] = [
+    excluded_directories: list[str] = [
         "node_modules", ".git", "dist", "build", ".next", ".venv",
         "__pycache__", "target", "coverage", ".idea", ".vscode",
     ]
