@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     default_temperature: float = 0.7
     max_discussion_rounds: int = 5
 
+    # Token limits
+    max_tokens_per_turn: int = 4096  # Maximum tokens per LLM call
+    max_total_tokens: int = 50000  # Maximum total tokens per discussion
+
     # File processing
     max_file_size_mb: int = 10
     allowed_extensions: list[str] = [
