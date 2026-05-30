@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDiscussionSSE } from '../hooks/useDiscussionSSE';
+import { useArtifactStore } from '../stores/artifactStore';
 import {
   MessageBubble,
   ThinkingIndicator,
@@ -20,6 +21,21 @@ export default function DiscussionPage() {
     startDiscussion,
     reset,
   } = useDiscussionSSE();
+
+  const { synthesize, isLoading: isSynthesizing } = useArtifactStore();
+  const [synthesizeError, setSynthesizeError] = useState<string | null>(null);
+
+  const handleSynthesize = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      setSynthesizeError(null);
+      await synthesize(roomId);
+      navigate(`/rooms/${roomId}/artifacts`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '合成失败';
+      setSynthesizeError(message);
+    }
+  }, [roomId, synthesize, navigate]);
 
   useEffect(() => {
     if (roomId) {
@@ -63,12 +79,21 @@ export default function DiscussionPage() {
           </div>
 
           {isComplete && (
-            <button
-              onClick={() => navigate(`/rooms/${roomId}`)}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-              查看产出
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSynthesize}
+                disabled={isSynthesizing}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSynthesizing ? '合成中...' : '生成产出'}
+              </button>
+              <button
+                onClick={() => navigate(`/rooms/${roomId}`)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                查看产出
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -110,6 +135,25 @@ export default function DiscussionPage() {
               />
             </svg>
             <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {synthesizeError && (
+        <div className="bg-red-50 border-t border-red-200 px-6 py-4 shrink-0">
+          <div className="flex items-center gap-2 text-red-700 text-sm">
+            <svg
+              className="w-5 h-5 shrink-0"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>{synthesizeError}</span>
           </div>
         </div>
       )}
