@@ -54,3 +54,6 @@ htmlcov/
 
 # Build outputs
 frontend/dist/
+
+# Worktrees
+.worktrees
