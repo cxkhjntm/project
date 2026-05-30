@@ -1,5 +1,6 @@
 """Shared source API endpoints."""
 
+import os
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -9,6 +10,7 @@ from app.database import get_session
 from app.schemas.shared_source import SharedSourceResponse
 from app.services.file_ingestion import file_ingestion_service
 from app.services.room_service import room_service
+from app.utils.path_validator import validate_path, PathValidationError
 
 router = APIRouter(tags=["sources"])
 
@@ -43,6 +45,10 @@ async def add_source(
     elif source_type == "folder":
         if not path:
             raise HTTPException(status_code=400, detail="Path is required for source_type='folder'")
+        try:
+            validate_path(path, os.getcwd())
+        except PathValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         source = await file_ingestion_service.add_folder_source(session, room_id, path)
         if not source:
             raise HTTPException(status_code=400, detail="Invalid folder path")
