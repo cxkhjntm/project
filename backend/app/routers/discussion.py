@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import get_session
+from app.database import get_session, async_session_factory
 from app.models.room import Room, RoomParticipant
 from app.models.role_card import RoleCard
 from app.models.provider import Provider
@@ -74,25 +74,29 @@ async def start_discussion(
     async def on_event(event_type: SSEEventType, data: dict):
         await event_queue.put((event_type.value, data))
     
-    orchestrator = create_orchestrator(
-        session=session,
-        room=room,
-        on_event=on_event,
-    )
-    
     async def run_discussion():
-        try:
-            result = await orchestrator.run_discussion()
-            
-            room.status = "completed" if result["success"] else "failed"
-            await session.commit()
-            
-        except Exception as e:
-            logger.error("Discussion failed", error=str(e))
-            room.status = "failed"
-            await session.commit()
-        finally:
-            await event_queue.put(None)
+        async with async_session_factory() as bg_session:
+            try:
+                # Merge room into the new session so ORM state is fresh
+                merged_room = await bg_session.merge(room)
+
+                orchestrator = create_orchestrator(
+                    session=bg_session,
+                    room=merged_room,
+                    on_event=on_event,
+                )
+
+                result = await orchestrator.run_discussion()
+
+                merged_room.status = "completed" if result["success"] else "failed"
+                await bg_session.commit()
+
+            except Exception as e:
+                logger.error("Discussion failed", error=str(e))
+                merged_room.status = "failed"
+                await bg_session.commit()
+            finally:
+                await event_queue.put(None)
     
     asyncio.create_task(run_discussion())
     

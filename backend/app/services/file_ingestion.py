@@ -62,12 +62,14 @@ class FileIngestionService:
 
         file_path.write_bytes(content)
 
+        file_content = read_file_content(str(file_path), max_chars=CONTENT_BUDGET_PER_FILE) or ""
+
         source = SharedSource(
             id=file_id,
             room_id=room_id,
             source_type="file",
             path=str(file_path),
-            content=filename,  # Original filename stored in content field
+            content=file_content,
             file_count=1,
         )
         session.add(source)
