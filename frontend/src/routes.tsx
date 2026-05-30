@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import Layout from '@/components/shared/Layout';
 import HomePage from '@/pages/HomePage';
+import SettingsPage from '@/pages/SettingsPage';
 
 const PlaceholderPage = ({ title }: { title: string }) => (
   <div className="text-center py-12">
@@ -15,7 +16,7 @@ export const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: 'settings', element: <PlaceholderPage title="Provider 设置" /> },
+      { path: 'settings', element: <SettingsPage /> },
       { path: 'role-cards', element: <PlaceholderPage title="角色卡管理" /> },
       { path: 'rooms', element: <PlaceholderPage title="讨论室" /> },
       { path: 'rooms/:id', element: <PlaceholderPage title="讨论室详情" /> },

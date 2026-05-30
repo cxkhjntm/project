@@ -8,9 +8,9 @@
 export interface Provider {
   id: string;
   name: string;
-  type: 'openai-compatible' | 'anthropic' | 'custom';
+  type: string;
   base_url: string;
-  api_key_encrypted: string;
+  api_key_masked: string;
   default_model: string;
   default_temperature: number;
   default_max_tokens: number;
@@ -21,7 +21,6 @@ export interface Provider {
 
 export interface ProviderCreate {
   name: string;
-  type?: string;
   base_url: string;
   api_key: string;
   default_model: string;
@@ -32,13 +31,18 @@ export interface ProviderCreate {
 
 export interface ProviderUpdate {
   name?: string;
-  type?: string;
   base_url?: string;
   api_key?: string;
   default_model?: string;
   default_temperature?: number;
   default_max_tokens?: number;
   enabled?: boolean;
+}
+
+export interface ProviderTestResult {
+  success: boolean;
+  message: string;
+  latency_ms?: number;
 }
 
 // === RoleCard ===
