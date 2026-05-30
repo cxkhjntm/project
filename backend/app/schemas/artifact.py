@@ -43,8 +43,6 @@ class ArtifactContent(BaseModel):
 
 
 class SynthesizeRequest(BaseModel):
-    """Schema for synthesize endpoint request."""
-    room_id: str = Field(..., description="Room ID to synthesize discussion from")
     artifact_type: str = Field(
         "markdown",
         description="Desired output type: markdown, text, code, csv",
