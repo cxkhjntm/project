@@ -79,7 +79,7 @@ class ApiClient {
   }
 
   async updateProvider(id: string, data: unknown): Promise<unknown> {
-    return this.request(`/providers/${id}`, { method: 'PATCH', body: data });
+    return this.request(`/providers/${id}`, { method: 'PUT', body: data });
   }
 
   async deleteProvider(id: string): Promise<void> {
@@ -105,7 +105,7 @@ class ApiClient {
   }
 
   async updateRoleCard(id: string, data: unknown): Promise<unknown> {
-    return this.request(`/role-cards/${id}`, { method: 'PATCH', body: data });
+    return this.request(`/role-cards/${id}`, { method: 'PUT', body: data });
   }
 
   async deleteRoleCard(id: string): Promise<void> {
@@ -134,7 +134,7 @@ class ApiClient {
   }
 
   async updateRoom(id: string, data: unknown): Promise<unknown> {
-    return this.request(`/rooms/${id}`, { method: 'PATCH', body: data });
+    return this.request(`/rooms/${id}`, { method: 'PUT', body: data });
   }
 
   async deleteRoom(id: string): Promise<void> {

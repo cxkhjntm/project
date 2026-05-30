@@ -88,7 +88,7 @@ export default function DiscussionPage() {
                 {isSynthesizing ? '合成中...' : '生成产出'}
               </button>
               <button
-                onClick={() => navigate(`/rooms/${roomId}`)}
+                onClick={() => navigate(`/rooms/${roomId}/artifacts`)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 查看产出
