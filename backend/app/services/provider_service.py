@@ -96,7 +96,11 @@ class ProviderService:
         if "api_key" in update_data:
             update_data["api_key_encrypted"] = crypto_service.encrypt(update_data.pop("api_key"))
         
+        valid_fields = {col.name for col in Provider.__table__.columns}
         for field, value in update_data.items():
+            if field not in valid_fields:
+                logger.warning("Ignoring invalid field in provider update", field=field)
+                continue
             setattr(provider, field, value)
         
         await session.flush()

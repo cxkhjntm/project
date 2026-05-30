@@ -87,7 +87,7 @@ class TestSynthesizeEndpoint:
             json={"artifact_type": "markdown"},
         )
         assert response.status_code == 404
-        assert response.json()["detail"] == "Room not found"
+        assert response.json()["message"] == "Room not found"
 
     @pytest.mark.asyncio
     async def test_synthesize_returns_400_for_room_without_messages(
@@ -99,7 +99,7 @@ class TestSynthesizeEndpoint:
             json={"artifact_type": "markdown"},
         )
         assert response.status_code == 400
-        assert "No messages" in response.json()["detail"]
+        assert "No messages" in response.json()["message"]
 
     @pytest.mark.asyncio
     async def test_synthesize_creates_artifact(
@@ -145,7 +145,7 @@ class TestListArtifactsEndpoint:
     ) -> None:
         response = await client.get("/api/rooms/nonexistent-room-id/artifacts")
         assert response.status_code == 404
-        assert response.json()["detail"] == "Room not found"
+        assert response.json()["message"] == "Room not found"
 
     @pytest.mark.asyncio
     async def test_list_artifacts_returns_empty_list(
@@ -179,7 +179,7 @@ class TestGetArtifactContentEndpoint:
     ) -> None:
         response = await client.get("/api/artifacts/nonexistent-id/content")
         assert response.status_code == 404
-        assert response.json()["detail"] == "Artifact not found"
+        assert response.json()["message"] == "Artifact not found"
 
     @pytest.mark.asyncio
     async def test_get_content_returns_file_content(
@@ -216,4 +216,4 @@ class TestGetArtifactContentEndpoint:
             f"/api/artifacts/{sample_artifact.id}/content"
         )
         assert response.status_code == 500
-        assert "Failed to read artifact file" in response.json()["detail"]
+        assert "Failed to read artifact file" in response.json()["message"]
