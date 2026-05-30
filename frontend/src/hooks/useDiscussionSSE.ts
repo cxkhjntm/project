@@ -76,9 +76,9 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
         }
       });
 
-      eventSource.addEventListener('error_event', (event) => {
+      eventSource.addEventListener('error', (event) => {
         try {
-          const data: ErrorEvent = JSON.parse(event.data);
+          const data: ErrorEvent = JSON.parse((event as MessageEvent).data);
           if (!data.recoverable) {
             setError(data.error);
             closeConnection();

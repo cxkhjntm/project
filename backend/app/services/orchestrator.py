@@ -224,6 +224,12 @@ class Orchestrator:
                     error=str(e),
                     round=self.current_round,
                 )
+                await self.emit_event(SSEEventType.ERROR, {
+                    "room_id": self.room_id,
+                    "error": "orchestrator_turn_failed",
+                    "message": str(e),
+                    "round": self.current_round,
+                })
 
     async def _run_expert_turn(self, participant: Dict[str, Any]) -> None:
         role_card_id = participant["role_card_id"]

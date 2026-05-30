@@ -2,16 +2,23 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDiscussionSSE } from '../hooks/useDiscussionSSE';
 import { useArtifactStore } from '../stores/artifactStore';
+import { apiClient } from '../api/client';
 import {
   MessageBubble,
   ThinkingIndicator,
   RoundProgress,
 } from '../components/discussion';
 
+interface RoomData {
+  round_limit: number;
+}
+
 export default function DiscussionPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [maxRounds, setMaxRounds] = useState(5);
 
   const {
     messages,
@@ -40,6 +47,14 @@ export default function DiscussionPage() {
   useEffect(() => {
     if (roomId) {
       startDiscussion(roomId);
+      apiClient.getRoom(roomId).then((room) => {
+        const data = room as RoomData;
+        if (data.round_limit) {
+          setMaxRounds(data.round_limit);
+        }
+      }).catch((err) => {
+        console.error('Failed to fetch room data:', err);
+      });
     }
 
     return () => {
@@ -61,7 +76,6 @@ export default function DiscussionPage() {
 
   const currentRound =
     messages.length > 0 ? messages[messages.length - 1].round : 0;
-  const maxRounds = 5;
 
   const thinkingRoles = Object.entries(thinking)
     .filter(([, isThinking]) => isThinking)
@@ -88,7 +102,7 @@ export default function DiscussionPage() {
                 {isSynthesizing ? '合成中...' : '生成产出'}
               </button>
               <button
-                onClick={() => navigate(`/rooms/${roomId}`)}
+                onClick={() => navigate(`/rooms/${roomId}/artifacts`)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 查看产出

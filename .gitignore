@@ -36,6 +36,12 @@ yarn-error.log*
 *.db-journal
 *.db-wal
 
+# Security
+.encryption_key
+
+# Uploads
+backend/uploads/
+
 # OS
 .DS_Store
 Thumbs.db

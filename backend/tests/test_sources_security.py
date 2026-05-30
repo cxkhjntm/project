@@ -77,7 +77,7 @@ class TestFolderPathTraversalRejection:
             },
         )
         assert response.status_code == 400
-        assert "traversal" in response.json()["detail"].lower() or "invalid" in response.json()["detail"].lower()
+        assert "traversal" in response.json()["message"].lower() or "invalid" in response.json()["message"].lower()
 
     @pytest.mark.asyncio
     async def test_rejects_relative_dot_dot_traversal(
@@ -222,7 +222,7 @@ class TestEdgeCases:
             },
         )
         assert response.status_code == 400
-        assert "path is required" in response.json()["detail"].lower()
+        assert "path is required" in response.json()["message"].lower()
 
     @pytest.mark.asyncio
     async def test_room_not_found_returns_404(
@@ -237,4 +237,4 @@ class TestEdgeCases:
             },
         )
         assert response.status_code == 404
-        assert "room not found" in response.json()["detail"].lower()
+        assert "room not found" in response.json()["message"].lower()

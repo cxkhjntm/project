@@ -55,8 +55,40 @@ def validate_file_path(file_path: str, allowed_extensions: set[str]) -> bool:
     return ext in allowed_extensions
 
 
+def validate_output_directory(path: str) -> str:
+    """Validate that output directory is an absolute path without traversal attempts.
+
+    Args:
+        path: Output directory path to validate
+
+    Returns:
+        Validated path (original string preserved)
+
+    Raises:
+        PathValidationError: If path is invalid, relative, or contains traversal
+    """
+    if not path:
+        raise PathValidationError("Output directory cannot be empty")
+
+    p = Path(path)
+
+    # Reject relative paths: accept Unix absolute (/) and Windows absolute (C:\)
+    if not (p.is_absolute() or path.startswith('/')):
+        raise PathValidationError(
+            f"Output directory must be an absolute path, got: '{path}'"
+        )
+
+    if '..' in p.parts:
+        raise PathValidationError(
+            f"Path traversal detected in output directory: '{path}'"
+        )
+
+    return path
+
+
 __all__ = [
     "PathValidationError",
     "validate_path",
     "validate_file_path",
+    "validate_output_directory",
 ]

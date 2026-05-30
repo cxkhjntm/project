@@ -1,9 +1,10 @@
 """FastAPI application entry point."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_handler
 from app.database import async_session_factory
 from app.routers import providers, role_cards, rooms, sources, discussion, artifacts
 from app.seed.loader import load_builtin_roles
@@ -32,6 +33,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(ErrorHandlerMiddleware)
+    app.add_exception_handler(HTTPException, http_exception_handler)
 
     app.include_router(providers.router)
     app.include_router(role_cards.router)
