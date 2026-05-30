@@ -1,4 +1,12 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { apiClient } from '@/api/client';
+
+interface HealthStatus {
+  status: 'loading' | 'connected' | 'error';
+  version?: string;
+  message?: string;
+}
 
 const cards = [
   {
@@ -25,8 +33,53 @@ const cards = [
 ];
 
 export default function HomePage() {
+  const [health, setHealth] = useState<HealthStatus>({ status: 'loading' });
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const data = await apiClient.healthCheck();
+        setHealth({ status: 'connected', version: data.version });
+      } catch (err) {
+        const isNetworkError = err instanceof TypeError && err.message === 'Failed to fetch';
+        const message = isNetworkError
+          ? '后端服务未运行，请先启动后端 (uvicorn app.main:app --port 8000)'
+          : err instanceof Error ? err.message : '无法连接到后端服务';
+        setHealth({ status: 'error', message });
+      }
+    };
+    checkHealth();
+  }, []);
+
   return (
     <div className="max-w-4xl mx-auto">
+      <div className={`mb-6 p-4 rounded-lg border ${
+        health.status === 'connected'
+          ? 'bg-green-50 border-green-200 text-green-800'
+          : health.status === 'error'
+          ? 'bg-red-50 border-red-200 text-red-800'
+          : 'bg-gray-50 border-gray-200 text-gray-600'
+      }`}>
+        {health.status === 'loading' && (
+          <div className="flex items-center gap-2">
+            <span className="animate-spin">⏳</span>
+            <span>正在检查后端连接...</span>
+          </div>
+        )}
+        {health.status === 'connected' && (
+          <div className="flex items-center gap-2">
+            <span>✅</span>
+            <span>后端连接成功 (v{health.version})</span>
+          </div>
+        )}
+        {health.status === 'error' && (
+          <div className="flex items-center gap-2">
+            <span>❌</span>
+            <span>后端连接失败: {health.message}</span>
+          </div>
+        )}
+      </div>
+
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
           专家团
