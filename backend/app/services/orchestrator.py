@@ -1,7 +1,7 @@
 """Discussion orchestrator for managing multi-expert conversations."""
 
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,7 @@ class Orchestrator:
         self,
         session: AsyncSession,
         room: Any,
-        on_event: Optional[Callable] = None,
+        on_event: Optional[Callable[..., Coroutine[Any, Any, None]]] = None,
     ):
         self.session = session
         self.room = room
@@ -201,6 +201,7 @@ class Orchestrator:
                     sender_type="orchestrator",
                     sender_id=None,
                     content=response.content,
+                    citations=None,
                     round=self.current_round,
                 )
 
@@ -284,6 +285,7 @@ class Orchestrator:
                 sender_type="expert",
                 sender_id=role_card_id,
                 content=response.content,
+                citations=None,
                 round=self.current_round,
             )
 
@@ -359,6 +361,6 @@ class Orchestrator:
 def create_orchestrator(
     session: AsyncSession,
     room: Any,
-    on_event: Optional[Callable] = None,
+    on_event: Optional[Callable[..., Coroutine[Any, Any, None]]] = None,
 ) -> Orchestrator:
     return Orchestrator(session=session, room=room, on_event=on_event)
