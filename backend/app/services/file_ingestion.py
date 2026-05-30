@@ -1,10 +1,7 @@
 """File ingestion service for processing uploaded files and folders."""
 
-import os
 import uuid
-from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +35,7 @@ class FileIngestionService:
         room_id: str,
         filename: str,
         content: bytes,
-    ) -> Optional[SharedSource]:
+    ) -> SharedSource | None:
         """Save an uploaded file and create a SharedSource.
 
         Args:
@@ -84,7 +81,7 @@ class FileIngestionService:
         session: AsyncSession,
         room_id: str,
         folder_path: str,
-    ) -> Optional[SharedSource]:
+    ) -> SharedSource | None:
         """Add a folder as a shared source.
 
         Args:
@@ -150,7 +147,7 @@ class FileIngestionService:
 
     async def get_room_sources(
         self, session: AsyncSession, room_id: str
-    ) -> List[SharedSource]:
+    ) -> list[SharedSource]:
         """Get all sources for a room.
 
         Args:
@@ -198,11 +195,10 @@ class FileIngestionService:
         logger.info("Deleted source", source_id=source_id)
         return True
 
-    def get_file_content_for_room(self, room_id: str, sources: List[SharedSource]) -> str:
+    def get_file_content_for_room(self, sources: list[SharedSource]) -> str:
         """Get aggregated file content for a room's sources.
 
         Args:
-            room_id: Room ID
             sources: List of shared sources
 
         Returns:
