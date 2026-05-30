@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import providers
 from app.utils.logger import setup_logging, get_logger
 
 setup_logging(debug=settings.debug)
@@ -29,6 +30,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(providers.router)
 
     @app.on_event("startup")
     async def startup_event() -> None:
