@@ -81,10 +81,17 @@ def scan_directory(
         if len(files) >= max_files:
             break
 
-        # Skip excluded directories
+        # Skip directories entirely
         if item.is_dir():
-            if is_excluded_directory(item.name):
-                continue
+            continue
+
+        # Compute relative path and check if any parent is excluded
+        try:
+            relative = item.relative_to(dir_path)
+        except ValueError:
+            relative = item
+
+        if any(is_excluded_directory(part) for part in relative.parts[:-1]):
             continue
 
         # Check extension
@@ -99,11 +106,6 @@ def scan_directory(
 
         if is_file_too_large(size):
             continue
-
-        try:
-            relative = item.relative_to(dir_path)
-        except ValueError:
-            relative = item
 
         files.append({
             "path": str(item),
