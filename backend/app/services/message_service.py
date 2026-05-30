@@ -59,9 +59,9 @@ class MessageService:
             .order_by(Message.round.asc(), Message.created_at.asc())
         )
 
-        if limit:
+        if limit is not None:
             query = query.limit(limit)
-        if offset:
+        if offset is not None:
             query = query.offset(offset)
 
         result = await session.execute(query)
