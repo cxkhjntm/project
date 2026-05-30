@@ -199,6 +199,17 @@ export interface Artifact {
   created_at: string;
 }
 
+export interface ArtifactContent {
+  content: string;
+  encoding: string;
+}
+
+export interface SynthesizeResponse {
+  artifact: Artifact;
+  content_preview?: string;
+  message: string;
+}
+
 // === API Response ===
 
 export interface ApiResponse<T> {
