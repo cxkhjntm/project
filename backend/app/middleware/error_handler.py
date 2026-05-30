@@ -28,7 +28,7 @@ HTTP_STATUS_PHRASES: dict[int, str] = {
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     error_phrase = HTTP_STATUS_PHRASES.get(exc.status_code, "Error")
     logger.warning(
         "http_exception",
@@ -50,6 +50,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
 
         try:
             response = await call_next(request)
