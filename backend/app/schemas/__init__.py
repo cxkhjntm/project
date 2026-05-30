@@ -14,6 +14,14 @@ from app.schemas.message import (
     MessageResponse,
     MessageListItem,
 )
+from app.schemas.artifact import (
+    ArtifactBase,
+    ArtifactCreate,
+    ArtifactResponse,
+    ArtifactContent,
+    SynthesizeRequest,
+    SynthesizeResponse,
+)
 
 __all__ = [
     "RoomCreate",
@@ -26,4 +34,10 @@ __all__ = [
     "MessageCreate",
     "MessageResponse",
     "MessageListItem",
+    "ArtifactBase",
+    "ArtifactCreate",
+    "ArtifactResponse",
+    "ArtifactContent",
+    "SynthesizeRequest",
+    "SynthesizeResponse",
 ]

@@ -6,6 +6,7 @@ import RoleCardsPage from '@/pages/RoleCardsPage';
 import RoomsPage from '@/pages/RoomsPage';
 import RoomCreatePage from '@/pages/RoomCreatePage';
 import DiscussionPage from '@/pages/DiscussionPage';
+import ArtifactPage from '@/pages/ArtifactPage';
 
 const PlaceholderPage = ({ title }: { title: string }) => (
   <div className="text-center py-12">
@@ -30,5 +31,9 @@ export const router = createBrowserRouter([
   {
     path: '/rooms/:roomId/discussion',
     element: <DiscussionPage />,
+  },
+  {
+    path: '/rooms/:roomId/artifacts',
+    element: <ArtifactPage />,
   },
 ]);
