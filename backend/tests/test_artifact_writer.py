@@ -1,7 +1,6 @@
 """Tests for artifact writer service."""
 
 import os
-import shutil
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -129,15 +128,6 @@ class TestBuildMarkdownContent:
         assert "role-architect" in markdown
         assert "role-pm" in markdown
 
-    def test_build_markdown_with_empty_messages(self, writer):
-        """Test markdown generation with no messages raises error."""
-        with pytest.raises(ValueError, match="No messages"):
-            writer._build_markdown_content(
-                room_name="Test Room",
-                goal="Test goal",
-                messages=[],
-            )
-
     def test_build_markdown_includes_timestamp(self, writer, sample_messages):
         """Test markdown includes generation timestamp."""
         markdown = writer._build_markdown_content(
@@ -197,10 +187,6 @@ class TestGenerateArtifact:
         assert "Test Room" in content
         assert "Test goal" in content
 
-        # Cleanup
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-
     async def test_saves_database_record(self, writer, sample_messages, output_dir, db_session):
         """Test that generate_artifact saves an Artifact record to the database."""
         from app.models.room import Room
@@ -230,10 +216,6 @@ class TestGenerateArtifact:
         assert artifact.title == "DB Test Room"
         assert artifact.file_path is not None
 
-        # Cleanup
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-
     async def test_returns_artifact_metadata(self, writer, sample_messages, output_dir, db_session):
         """Test that generate_artifact returns correct metadata."""
         from app.models.room import Room
@@ -260,10 +242,6 @@ class TestGenerateArtifact:
         assert artifact.summary is not None
         assert len(artifact.summary) > 0
 
-        # Cleanup
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-
     async def test_generates_unique_directory_per_run(self, writer, sample_messages, output_dir, db_session):
         """Test that each artifact run creates a unique subdirectory."""
         from app.models.room import Room
@@ -288,10 +266,6 @@ class TestGenerateArtifact:
         # file_path should be inside a timestamped subdirectory
         assert output_dir in artifact.file_path
         assert artifact.file_path.endswith("final-plan.md")
-
-        # Cleanup
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
 
     async def test_empty_messages_raises_error(self, writer, output_dir, db_session):
         """Test that generate_artifact raises ValueError for empty messages."""
@@ -332,10 +306,6 @@ class TestGenerateArtifact:
         assert content.startswith("# ")  # Title
         assert "## " in content  # Sections
         assert "---" in content  # Horizontal rules or metadata separators
-
-        # Cleanup
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
 
 
 class TestArtifactWriterEdgeCases:
@@ -379,10 +349,6 @@ class TestArtifactWriterEdgeCases:
         with open(artifact.file_path, "r", encoding="utf-8") as f:
             content = f.read()
         assert "This discussion has concluded" in content
-
-        # Cleanup
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
 
     def test_sender_label_unknown_type(self, writer):
         """Test that unknown sender types get a generic label."""

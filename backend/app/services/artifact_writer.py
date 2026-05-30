@@ -4,7 +4,7 @@ import os
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,11 @@ from app.models.artifact import Artifact
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class ArtifactWriterError(Exception):
+    """Exception raised for artifact writer errors."""
+    pass
 
 
 class ArtifactWriter:
@@ -37,11 +42,21 @@ class ArtifactWriter:
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         artifact_dir = os.path.join(output_directory, f"artifact_{timestamp}")
-        os.makedirs(artifact_dir, exist_ok=True)
 
-        file_path = os.path.join(artifact_dir, "final-plan.md")
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(markdown_content)
+        try:
+            os.makedirs(artifact_dir, exist_ok=True)
+            file_path = os.path.join(artifact_dir, "final-plan.md")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(markdown_content)
+        except OSError as e:
+            logger.error(
+                "Failed to write artifact file",
+                artifact_dir=artifact_dir,
+                error=str(e),
+            )
+            raise ArtifactWriterError(
+                f"Failed to write artifact to {artifact_dir}: {e}"
+            ) from e
 
         summary = self._build_summary(messages)
 
@@ -73,9 +88,6 @@ class ArtifactWriter:
         goal: str,
         messages: List[Dict[str, Any]],
     ) -> str:
-        if not messages:
-            raise ValueError("No messages provided for artifact generation")
-
         lines: List[str] = []
         lines.append(f"# {room_name}")
         lines.append("")
@@ -106,7 +118,7 @@ class ArtifactWriter:
 
         return "\n".join(lines)
 
-    def _get_sender_label(self, sender_type: str, sender_id: str | None) -> str:
+    def _get_sender_label(self, sender_type: str, sender_id: Optional[str]) -> str:
         if sender_type == "orchestrator":
             return "主持人"
         elif sender_type == "expert":
