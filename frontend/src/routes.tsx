@@ -3,6 +3,8 @@ import Layout from '@/components/shared/Layout';
 import HomePage from '@/pages/HomePage';
 import SettingsPage from '@/pages/SettingsPage';
 import RoleCardsPage from '@/pages/RoleCardsPage';
+import RoomsPage from '@/pages/RoomsPage';
+import RoomCreatePage from '@/pages/RoomCreatePage';
 
 const PlaceholderPage = ({ title }: { title: string }) => (
   <div className="text-center py-12">
@@ -19,7 +21,8 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'role-cards', element: <RoleCardsPage /> },
-      { path: 'rooms', element: <PlaceholderPage title="讨论室" /> },
+      { path: 'rooms', element: <RoomsPage /> },
+      { path: 'rooms/create', element: <RoomCreatePage /> },
       { path: 'rooms/:id', element: <PlaceholderPage title="讨论室详情" /> },
     ],
   },
