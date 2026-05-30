@@ -8,6 +8,12 @@ from app.schemas.room import (
     ParticipantInput,
     ParticipantResponse,
 )
+from app.schemas.message import (
+    Citation,
+    MessageCreate,
+    MessageResponse,
+    MessageListItem,
+)
 
 __all__ = [
     "RoomCreate",
@@ -16,4 +22,8 @@ __all__ = [
     "RoomListItem",
     "ParticipantInput",
     "ParticipantResponse",
+    "Citation",
+    "MessageCreate",
+    "MessageResponse",
+    "MessageListItem",
 ]
