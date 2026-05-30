@@ -112,6 +112,13 @@ class ApiClient {
     return this.request(`/role-cards/${id}`, { method: 'DELETE' });
   }
 
+  async copyRoleCard(id: string, newName: string): Promise<unknown> {
+    return this.request(`/role-cards/${id}/copy`, {
+      method: 'POST',
+      body: { new_name: newName },
+    });
+  }
+
   // === Rooms ===
 
   async getRooms(): Promise<unknown[]> {
