@@ -1,0 +1,112 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:5173",
+    "distDir": "../frontend/dist",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "Expert Room",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "sidecar": true,
+        "open": true,
+        "scope": [
+          {
+            "name": "backend",
+            "cmd": "backend/expert-room-backend",
+            "args": true
+          }
+        ]
+      },
+      "dialog": {
+        "all": true
+      },
+      "fs": {
+        "all": true,
+        "scope": {
+          "allow": [
+            "$APPDATA",
+            "$APPDATA/**",
+            "$DOCUMENT",
+            "$DOCUMENT/**",
+            "$DOWNLOAD",
+            "$DOWNLOAD/**",
+            "$DESKTOP",
+            "$DESKTOP/**"
+          ]
+        }
+      },
+      "path": {
+        "all": true
+      },
+      "window": {
+        "all": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.expert-room.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "resources": [
+        "backend/*"
+      ],
+      "externalBin": [
+        "backend/expert-room-backend"
+      ],
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      },
+      "macOS": {
+        "entitlements": null,
+        "minimumSystemVersion": "10.15"
+      },
+      "linux": {
+        "deb": {
+          "depends": []
+        }
+      }
+    },
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://localhost:* ws://localhost:*"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "专家团 - AI Expert Team",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false
+      }
+    ],
+    "updater": {
+      "active": false
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    }
+  }
+}
