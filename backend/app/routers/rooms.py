@@ -13,6 +13,7 @@ from app.schemas.room import (
     RoomUpdate,
 )
 from app.services.room_service import room_service
+from app.utils.path_validator import PathValidationError
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -23,7 +24,12 @@ async def create_room(
     session: AsyncSession = Depends(get_session),
 ) -> RoomResponse:
     """Create a new room with participants."""
-    room = await room_service.create(session, data)
+    try:
+        room = await room_service.create(session, data)
+    except PathValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return RoomResponse.model_validate(room)
 
 

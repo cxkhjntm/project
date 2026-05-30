@@ -184,6 +184,38 @@ async def stream_messages(
         nonlocal last_message_count
         
         while True:
+            result = await session.execute(
+                select(Room).where(Room.id == room_id)
+            )
+            current_room = result.scalar_one_or_none()
+            
+            if not current_room:
+                break
+            
+            if current_room.status in ("completed", "failed"):
+                messages = await message_service.get_by_room(session, room_id)
+                
+                if len(messages) > last_message_count:
+                    new_messages = messages[last_message_count:]
+                    for msg in new_messages:
+                        yield {
+                            "event": "message",
+                            "data": json.dumps(
+                                MessageResponse.model_validate(msg).model_dump(),
+                                ensure_ascii=False,
+                            ),
+                        }
+                
+                yield {
+                    "event": "done",
+                    "data": json.dumps({
+                        "room_id": room_id,
+                        "status": current_room.status,
+                        "total_messages": len(messages),
+                    }),
+                }
+                break
+            
             messages = await message_service.get_by_room(session, room_id)
             
             if len(messages) > last_message_count:

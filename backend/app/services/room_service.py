@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.room import Room, RoomParticipant
+from app.models.role_card import RoleCard
+from app.models.provider import Provider
 from app.schemas.room import RoomCreate, RoomUpdate
 from app.utils.logger import get_logger
+from app.utils.path_validator import PathValidationError, validate_output_directory
 
 logger = get_logger(__name__)
 
@@ -25,8 +28,22 @@ class RoomService:
             
         Returns:
             Created room with participants loaded
+            
+        Raises:
+            PathValidationError: If output_directory is invalid
+            ValueError: If referenced role_card_id or provider_id doesn't exist
         """
         import uuid
+
+        validated_output_dir = validate_output_directory(data.output_directory)
+
+        for p in data.participants:
+            role_card = await session.get(RoleCard, p.role_card_id)
+            if not role_card:
+                raise ValueError(f"Role card not found: {p.role_card_id}")
+            provider = await session.get(Provider, p.provider_id)
+            if not provider:
+                raise ValueError(f"Provider not found: {p.provider_id}")
 
         room = Room(
             id=str(uuid.uuid4()),
@@ -34,7 +51,7 @@ class RoomService:
             goal=data.goal,
             mode=data.mode,
             strategy=data.strategy,
-            output_directory=data.output_directory,
+            output_directory=validated_output_dir,
             round_limit=data.round_limit,
             status="draft",
         )
