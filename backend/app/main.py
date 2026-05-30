@@ -4,8 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.database import async_session_factory
 from app.routers import providers, role_cards
-from app.utils.logger import setup_logging, get_logger
+from app.seed.loader import load_builtin_roles
+from app.utils.logger import get_logger, setup_logging
 
 setup_logging(debug=settings.debug)
 logger = get_logger(__name__)
@@ -37,6 +39,10 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event() -> None:
         logger.info("Starting Expert Room API", version="0.1.0", debug=settings.debug)
+
+        async with async_session_factory() as session:
+            await load_builtin_roles(session)
+            await session.commit()
 
     @app.on_event("shutdown")
     async def shutdown_event() -> None:
