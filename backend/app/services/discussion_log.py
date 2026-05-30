@@ -2,13 +2,13 @@
 
 import os
 import uuid
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artifact import Artifact
+from app.utils.formatters import build_discussion_markdown, build_summary, get_sender_label
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,52 +88,15 @@ class DiscussionLogGenerator:
         goal: str,
         messages: List[Dict[str, Any]],
     ) -> str:
-        lines: List[str] = []
-        lines.append(f"# {room_name}")
-        lines.append("")
-        lines.append(f"**目标**: {goal}")
-        lines.append("")
-
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        lines.append(f"*生成时间: {now}*")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-
-        rounds: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
-        for msg in messages:
-            rounds[msg["round"]].append(msg)
-
-        for round_num in sorted(rounds.keys()):
-            lines.append(f"## Round {round_num}")
-            lines.append("")
-            for msg in rounds[round_num]:
-                sender_label = self._get_sender_label(
-                    msg["sender_type"], msg.get("sender_id")
-                )
-                lines.append(f"**{sender_label}**: {msg['content']}")
-                lines.append("")
-            lines.append("---")
-            lines.append("")
-
-        summary = self._build_summary(messages)
-        lines.append("## 统计摘要")
-        lines.append("")
-        lines.append(summary)
-
-        return "\n".join(lines)
+        return build_discussion_markdown(
+            room_name=room_name,
+            goal=goal,
+            messages=messages,
+            include_summary=True,
+        )
 
     def _get_sender_label(self, sender_type: str, sender_id: Optional[str]) -> str:
-        if sender_type == "orchestrator":
-            return "主持人"
-        elif sender_type == "expert":
-            return f"专家 ({sender_id})"
-        elif sender_type == "system":
-            return "系统"
-        else:
-            return sender_type
+        return get_sender_label(sender_type, sender_id)
 
     def _build_summary(self, messages: List[Dict[str, Any]]) -> str:
-        round_count = len({m["round"] for m in messages})
-        expert_count = len({m.get("sender_id") for m in messages if m["sender_type"] == "expert"})
-        return f"共 {len(messages)} 条消息，{round_count} 轮讨论，{expert_count} 位专家参与"
+        return build_summary(messages)
