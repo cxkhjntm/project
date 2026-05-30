@@ -167,10 +167,20 @@ class ApiClient {
     });
   }
 
-  async deleteRoomSource(roomId: string, sourceId: string): Promise<void> {
-    return this.request(`/rooms/${roomId}/sources/${sourceId}`, {
-      method: 'DELETE',
+  async uploadRoomSource(roomId: string, formData: FormData): Promise<unknown> {
+    const response = await fetch(`${this.baseUrl}/rooms/${roomId}/sources`, {
+      method: 'POST',
+      body: formData, // Don't set Content-Type for FormData
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new ApiError(error.detail || 'Upload failed', response.status);
+    }
+    return response.json();
+  }
+
+  async deleteRoomSource(sourceId: string): Promise<void> {
+    return this.request(`/sources/${sourceId}`, { method: 'DELETE' });
   }
 
   // === Room Artifacts ===

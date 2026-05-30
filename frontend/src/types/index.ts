@@ -96,6 +96,12 @@ export type RoomMode = 'code_document' | 'document' | 'code';
 export type RoomStrategy = 'standard' | 'debate' | 'sequential';
 export type RoomStatus = 'draft' | 'active' | 'completed' | 'error';
 
+export interface ParticipantInput {
+  role_card_id: string;
+  provider_id: string;
+  model_override?: string;
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -117,7 +123,7 @@ export interface RoomCreate {
   strategy?: RoomStrategy;
   output_directory: string;
   round_limit?: number;
-  participant_ids: string[];
+  participants: ParticipantInput[];
 }
 
 export interface RoomUpdate {
