@@ -2,13 +2,44 @@
 
 import re
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+CONVERGENCE_KEYWORDS = ["可行", "同意", "没有异议", "建议直接", "没问题", "LGTM", "一致", "共识"]
+
+
+def parse_host_action(content: str) -> Optional[Tuple[str, Optional[str]]]:
+    match = re.search(r'ACTION:\s*(next:(\w+)|converge|synthesize)', content, re.IGNORECASE)
+    if not match:
+        return None
+    action_str = match.group(1).lower()
+    if action_str == "converge":
+        return ("converge", None)
+    if action_str == "synthesize":
+        return ("synthesize", None)
+    if action_str.startswith("next:"):
+        return ("next", match.group(2))
+    return None
+
+
+def parse_length_warning(content: str) -> bool:
+    return bool(re.search(r'LENGTH_WARNING:\s*true', content, re.IGNORECASE))
+
+
+def check_convergence_keywords(messages: List[Dict[str, Any]], min_ratio: float = 0.6) -> bool:
+    if not messages:
+        return False
+    last_round = max(m.get("round", 0) for m in messages)
+    last_round_experts = [m for m in messages if m.get("round") == last_round and m.get("sender_type") == "expert"]
+    if len(last_round_experts) < 2:
+        return False
+    positive = sum(1 for m in last_round_experts if any(kw in m.get("content", "") for kw in CONVERGENCE_KEYWORDS))
+    return positive >= len(last_round_experts) * min_ratio
 
 CONVERGENCE_KEYWORDS = [
     "可行", "同意", "没有异议", "建议直接", "没问题", "LGTM",
@@ -69,8 +100,6 @@ class SSEEventType(str, Enum):
     ARTIFACT = "artifact"
     ERROR = "error"
     DONE = "done"
-    STATUS = "status"
-    COST_UPDATE = "cost_update"
     STATUS = "status"
     COST_UPDATE = "cost_update"
 
@@ -235,21 +264,76 @@ class Orchestrator:
 
         from app.services.context_builder import context_builder
 
-        additional_context = None
-        if length_warning:
-            additional_context = "⚠️ 上一轮回复过长。本轮请严格控制在 300 字以内，使用要点式输出。"
-
-        prompt = context_builder.build_expert_prompt(
-            role=role_data,
+        prompt = context_builder.build_orchestrator_prompt(
             goal=self.goal,
             shared_sources=self.shared_sources,
             rolling_summary=self.rolling_summary,
             current_round=self.current_round,
             total_rounds=self.max_rounds,
-            additional_context=additional_context,
+            experts=[{"name": p["name"]} for p in self.participants],
         )
 
         if not self.participants:
+            return None
+
+        provider = self.participants[0]
+        api_key = await self._get_api_key(provider["provider_id"])
+
+        from app.services.model_client import create_model_client, ModelClientError
+
+        client = create_model_client(
+            base_url=provider["base_url"],
+            api_key=api_key,
+            model=provider["model"],
+        )
+
+        try:
+            response = await client.chat_completion(
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            from app.schemas.message import MessageCreate
+            from app.services.message_service import message_service
+
+            message_data = MessageCreate(
+                room_id=self.room_id,
+                sender_type="orchestrator",
+                sender_id=None,
+                content=response.content,
+                citations=None,
+                round=self.current_round,
+            )
+
+            message = await message_service.create(self.session, message_data)
+            self.total_messages += 1
+
+            self.all_messages.append({
+                "sender_type": "orchestrator",
+                "sender_id": None,
+                "content": response.content,
+                "round": self.current_round,
+            })
+
+            await self.emit_event(SSEEventType.MESSAGE, {
+                "id": message.id,
+                "room_id": self.room_id,
+                "sender_type": "orchestrator",
+                "sender_id": None,
+                "content": response.content,
+                "citations": [],
+                "round": self.current_round,
+            })
+
+            return response.content
+
+        except ModelClientError as e:
+            logger.error("Orchestrator turn failed", error=str(e), round=self.current_round)
+            await self.emit_event(SSEEventType.ERROR, {
+                "room_id": self.room_id,
+                "error": "orchestrator_turn_failed",
+                "message": str(e),
+                "round": self.current_round,
+            })
             return None
 
         provider = self.participants[0]
@@ -458,6 +542,42 @@ class Orchestrator:
             return True
         if self.current_round < 2:
             return False
+        return check_convergence_keywords(self.all_messages)
+
+    def _extract_key_point(self, content: str) -> Optional[str]:
+        skip_patterns = [
+            r'^(关于|针对|对于|关于这个|说到|谈到|提及|涉及|回到)',
+            r'^#{1,6}\s', r'^[-*]\s', r'^```', r'^\s*$', r'^>\s',
+        ]
+        lines = content.split('\n')
+        for line in lines:
+            trimmed = line.strip()
+            if len(trimmed) < 15:
+                continue
+            if any(re.match(p, trimmed) for p in skip_patterns):
+                continue
+            cleaned = trimmed.replace('**', '').replace('*', '').replace('`', '')
+            return cleaned[:100]
+        meaningful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 10]
+        return max(meaningful, key=len)[:100] if meaningful else None
+        return check_convergence_keywords(self.all_messages)
+
+    def _extract_key_point(self, content: str) -> Optional[str]:
+        skip_patterns = [
+            r'^(关于|针对|对于|关于这个|说到|谈到|提及|涉及|回到)',
+            r'^#{1,6}\s', r'^[-*]\s', r'^```', r'^\s*$', r'^>\s',
+        ]
+        lines = content.split('\n')
+        for line in lines:
+            trimmed = line.strip()
+            if len(trimmed) < 15:
+                continue
+            if any(re.match(p, trimmed) for p in skip_patterns):
+                continue
+            cleaned = trimmed.replace('**', '').replace('*', '').replace('`', '')
+            return cleaned[:100]
+        meaningful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 10]
+        return max(meaningful, key=len)[:100] if meaningful else None
         return check_convergence_keywords(self.all_messages)
 
     def _extract_key_point(self, content: str) -> Optional[str]:
