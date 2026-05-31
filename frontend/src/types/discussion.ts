@@ -6,6 +6,7 @@ export interface DiscussionMessage {
   content: string;
   citations: Citation[] | null;
   round: number;
+  key_point?: string | null;
   created_at: string;
 }
 
@@ -24,6 +25,7 @@ export interface ThinkingEvent {
 export interface ErrorEvent {
   room_id: string;
   error: string;
+  message?: string;
   recoverable: boolean;
 }
 
@@ -34,13 +36,32 @@ export interface DoneEvent {
   artifact_count: number;
 }
 
-export type DiscussionEventType = 'thinking' | 'message' | 'artifact' | 'error' | 'done';
+export interface StatusEvent {
+  room_id: string;
+  status: string;
+  phase: string;
+  round: number;
+  total_rounds: number;
+}
+
+export interface CostUpdateEvent {
+  room_id: string;
+  total_tokens: number;
+  round: number;
+}
+
+export type DiscussionEventType = 'thinking' | 'message' | 'artifact' | 'error' | 'done' | 'status' | 'cost_update';
 
 export interface UseDiscussionSSEReturn {
   messages: DiscussionMessage[];
   thinking: Record<string, boolean>;
   error: string | null;
   isComplete: boolean;
+  status: string;
+  currentRound: number;
+  totalRounds: number;
+  totalTokens: number;
+  startTimestamp: number | null;
   startDiscussion: (roomId: string) => Promise<void>;
   reset: () => void;
 }
