@@ -96,10 +96,10 @@ DEBUG=false
 # 数据库
 DATABASE_URL=sqlite+aiosqlite:///./expert_room.db
 
-# CORS（逗号分隔）
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+# CORS（JSON 数组格式）
+CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
 
-# 安全 - 用于加密 API 密钥
+# 安全 - 用于加密 API 密钥（Fernet 格式，32 字节 Base64 编码）
 ENCRYPTION_KEY=your-generated-key-here
 
 # LLM 默认参数
@@ -265,8 +265,9 @@ project/
 
 - 密钥在写入数据库前加密
 - 读取时解密，传输到前端时掩码显示（如 `sk-abc12345***`）
-- 加密密钥通过环境变量 `ENCRYPTION_KEY` 配置
-- 未配置时自动生成临时密钥（重启后失效）
+- 加密密钥优先从环境变量 `ENCRYPTION_KEY` 读取（需为有效 Fernet 格式）
+- 若 `ENCRYPTION_KEY` 未配置或格式无效，自动从 `.encryption_key` 文件读取
+- 若文件也不存在，自动生成新密钥并持久化到 `.encryption_key`
 
 ### 文件安全
 

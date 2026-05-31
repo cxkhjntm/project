@@ -21,8 +21,8 @@ class CryptoService:
     def __init__(self, key_file: Path | None = None) -> None:
         """Initialize crypto service with key from settings.
 
-        If ENCRYPTION_KEY is set in config, use it directly.
-        Otherwise, load from key_file or generate and persist a new key.
+        If ENCRYPTION_KEY is set in config, validate and use it directly.
+        If invalid or empty, fall back to key_file or generate a new key.
 
         Args:
             key_file: Path to persisted key file. Defaults to .encryption_key
@@ -31,7 +31,20 @@ class CryptoService:
         self._key_file = key_file or _KEY_FILE
 
         if settings.encryption_key:
-            self._key = settings.encryption_key.encode()
+            key_bytes = settings.encryption_key.encode()
+            try:
+                Fernet(key_bytes)  # Validate before using
+                self._key = key_bytes
+                logger.info("Using encryption key from ENCRYPTION_KEY env var")
+            except ValueError:
+                logger.warning(
+                    "Invalid ENCRYPTION_KEY in env var (must be 32 url-safe base64-encoded bytes), "
+                    "falling back to key file",
+                    env_key_preview=settings.encryption_key[:8] + "***"
+                    if len(settings.encryption_key) > 8
+                    else "***",
+                )
+                self._key = self._load_or_generate_key()
         else:
             self._key = self._load_or_generate_key()
 

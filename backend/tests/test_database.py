@@ -14,7 +14,10 @@ def test_settings_defaults():
     assert settings.debug is False
     assert settings.database_url == "sqlite+aiosqlite:///./expert_room.db"
     assert settings.cors_origins == ["http://localhost:5173", "http://localhost:3000"]
-    assert settings.encryption_key == ""
+    # encryption_key may be set from .env or empty (auto-generated at runtime)
+    if settings.encryption_key:
+        from cryptography.fernet import Fernet
+        Fernet(settings.encryption_key.encode())  # Should not raise
     assert settings.default_max_tokens == 4096
     assert settings.default_temperature == 0.7
     assert settings.max_discussion_rounds == 5
