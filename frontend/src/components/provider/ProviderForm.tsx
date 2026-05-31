@@ -9,7 +9,8 @@ const providerSchema = z.object({
   api_key: z.string().min(1, '请输入 API Key').max(500),
   default_model: z.string().min(1, '请输入默认模型名称').max(100),
   default_temperature: z.number().min(0, '温度不能小于 0').max(2, '温度不能大于 2'),
-  default_max_tokens: z.number().min(1, '最大 Token 不能小于 1').max(128000, '最大 Token 不能超过 128000'),
+  default_max_input_tokens: z.number().min(1, '输入 Token 不能小于 1').max(1000000, '输入 Token 不能超过 1000000'),
+  default_max_output_tokens: z.number().min(1, '输出 Token 不能小于 1').max(1000000, '输出 Token 不能超过 1000000'),
 });
 
 type ProviderFormData = z.infer<typeof providerSchema>;
@@ -40,7 +41,8 @@ export default function ProviderForm({
           api_key: '',
           default_model: provider.default_model,
           default_temperature: provider.default_temperature,
-          default_max_tokens: provider.default_max_tokens,
+          default_max_input_tokens: provider.default_max_input_tokens,
+          default_max_output_tokens: provider.default_max_output_tokens,
         }
       : {
           name: '',
@@ -48,7 +50,8 @@ export default function ProviderForm({
           api_key: '',
           default_model: 'gpt-4',
           default_temperature: 0.7,
-          default_max_tokens: 4096,
+          default_max_input_tokens: 128000,
+          default_max_output_tokens: 4096,
         },
   });
 
@@ -145,19 +148,36 @@ export default function ProviderForm({
         </div>
 
         <div>
-          <label htmlFor="default_max_tokens" className="block text-sm font-medium text-gray-700 mb-1">
-            默认最大 Token
+          <label htmlFor="default_max_input_tokens" className="block text-sm font-medium text-gray-700 mb-1">
+            最大输入 Token（上下文窗口）
           </label>
           <input
-            id="default_max_tokens"
+            id="default_max_input_tokens"
             type="number"
-            {...register('default_max_tokens', { valueAsNumber: true })}
+            {...register('default_max_input_tokens', { valueAsNumber: true })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="例如：128000, 200000, 1000000"
           />
-          {errors.default_max_tokens && (
-            <p className="mt-1 text-sm text-red-600">{errors.default_max_tokens.message}</p>
+          {errors.default_max_input_tokens && (
+            <p className="mt-1 text-sm text-red-600">{errors.default_max_input_tokens.message}</p>
           )}
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="default_max_output_tokens" className="block text-sm font-medium text-gray-700 mb-1">
+          最大输出 Token（生成长度）
+        </label>
+        <input
+          id="default_max_output_tokens"
+          type="number"
+          {...register('default_max_output_tokens', { valueAsNumber: true })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          placeholder="例如：4096, 8192, 16384"
+        />
+        {errors.default_max_output_tokens && (
+          <p className="mt-1 text-sm text-red-600">{errors.default_max_output_tokens.message}</p>
+        )}
       </div>
 
       <div className="flex justify-end space-x-3 pt-4 border-t">

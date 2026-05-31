@@ -13,7 +13,8 @@ class ProviderCreate(BaseModel):
     api_key: str = Field(..., min_length=1, description="API key (will be encrypted)")
     default_model: str = Field(..., min_length=1, max_length=100, description="Default model name")
     default_temperature: float = Field(0.7, ge=0.0, le=2.0, description="Default temperature")
-    default_max_tokens: int = Field(4096, ge=1, le=128000, description="Default max tokens")
+    default_max_input_tokens: int = Field(128000, ge=1, le=1000000, description="Default max input tokens (context window)")
+    default_max_output_tokens: int = Field(4096, ge=1, le=1000000, description="Default max output tokens (generation)")
 
 
 class ProviderUpdate(BaseModel):
@@ -23,7 +24,8 @@ class ProviderUpdate(BaseModel):
     api_key: Optional[str] = Field(None, min_length=1)
     default_model: Optional[str] = Field(None, min_length=1, max_length=100)
     default_temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    default_max_tokens: Optional[int] = Field(None, ge=1, le=128000)
+    default_max_input_tokens: Optional[int] = Field(None, ge=1, le=1000000)
+    default_max_output_tokens: Optional[int] = Field(None, ge=1, le=1000000)
     enabled: Optional[bool] = None
 
 
@@ -36,7 +38,8 @@ class ProviderResponse(BaseModel):
     api_key_masked: str = Field(..., description="Masked API key for display")
     default_model: str
     default_temperature: float
-    default_max_tokens: int
+    default_max_input_tokens: int
+    default_max_output_tokens: int
     enabled: bool
     created_at: datetime
     updated_at: datetime

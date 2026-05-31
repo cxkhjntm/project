@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_handler
 from app.database import async_session_factory
-from app.routers import providers, role_cards, rooms, sources, discussion, artifacts
+from app.routers import providers, role_cards, rooms, sources, discussion, artifacts, filesystem
 from app.seed.loader import load_builtin_roles
 from app.utils.logger import get_logger, setup_logging
 
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(sources.router)
     app.include_router(discussion.router)
     app.include_router(artifacts.router)
+    app.include_router(filesystem.router)
 
     @app.on_event("startup")
     async def startup_event() -> None:

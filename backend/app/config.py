@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     max_discussion_rounds: int = 5
 
     # Token limits
-    max_tokens_per_turn: int = 4096  # Maximum tokens per LLM call
+    max_tokens_per_turn: int = 4096  # Maximum output tokens per LLM call
     max_total_tokens: int = 50000  # Maximum total tokens per discussion
 
     # File processing

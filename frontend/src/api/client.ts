@@ -87,7 +87,7 @@ class ApiClient {
   }
 
   async testProvider(id: string): Promise<{ success: boolean; message: string }> {
-    return this.request(`/providers/${id}/test`);
+    return this.request(`/providers/${id}/test`, { method: 'POST' });
   }
 
   // === Role Cards ===
@@ -187,6 +187,17 @@ class ApiClient {
 
   async getRoomArtifacts(roomId: string): Promise<unknown[]> {
     return this.request(`/rooms/${roomId}/artifacts`);
+  }
+
+  // === Filesystem ===
+
+  async browseDirectory(path: string = ''): Promise<{
+    current_path: string;
+    parent_path: string | null;
+    entries: Array<{ name: string; path: string; is_directory: boolean }>;
+  }> {
+    const query = path ? `?path=${encodeURIComponent(path)}` : '';
+    return this.request(`/filesystem/browse${query}`);
   }
 }
 

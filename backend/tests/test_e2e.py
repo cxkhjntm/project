@@ -54,7 +54,8 @@ class TestEndToEndFlow:
                 "api_key": "sk-test-key-12345",
                 "default_model": "gpt-4o",
                 "default_temperature": 0.7,
-                "default_max_tokens": 4096,
+                "default_max_input_tokens": 128000,
+                "default_max_output_tokens": 4096,
             },
         )
         assert provider_response.status_code == 201

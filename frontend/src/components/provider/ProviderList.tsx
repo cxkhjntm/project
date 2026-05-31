@@ -56,8 +56,9 @@ export default function ProviderList({ providers, onEdit, onDelete }: ProviderLi
                   <span className="font-mono text-xs">{provider.api_key_masked}</span>
                 </p>
                 <p className="text-xs text-gray-400">
-                  温度: {provider.default_temperature} | 最大 Token:{' '}
-                  {provider.default_max_tokens.toLocaleString()}
+                  温度: {provider.default_temperature} | 输入 Token:{' '}
+                  {provider.default_max_input_tokens.toLocaleString()} | 输出 Token:{' '}
+                  {provider.default_max_output_tokens.toLocaleString()}
                 </p>
               </div>
             </div>

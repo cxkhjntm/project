@@ -13,7 +13,8 @@ export interface Provider {
   api_key_masked: string;
   default_model: string;
   default_temperature: number;
-  default_max_tokens: number;
+  default_max_input_tokens: number;
+  default_max_output_tokens: number;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -25,7 +26,8 @@ export interface ProviderCreate {
   api_key: string;
   default_model: string;
   default_temperature?: number;
-  default_max_tokens?: number;
+  default_max_input_tokens?: number;
+  default_max_output_tokens?: number;
   enabled?: boolean;
 }
 
@@ -35,7 +37,8 @@ export interface ProviderUpdate {
   api_key?: string;
   default_model?: string;
   default_temperature?: number;
-  default_max_tokens?: number;
+  default_max_input_tokens?: number;
+  default_max_output_tokens?: number;
   enabled?: boolean;
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/api/client';
 import type { RoleCard, Provider, RoomCreate, ParticipantInput } from '@/types';
+import FolderPicker from '@/components/shared/FolderPicker';
 
 interface RoomFormProps {
   onSubmit: (data: RoomCreate) => Promise<void>;
@@ -112,19 +113,13 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          产出目录
-        </label>
-        <input
-          type="text"
-          value={outputDirectory}
-          onChange={e => setOutputDirectory(e.target.value)}
-          required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          placeholder="/path/to/output"
-        />
-      </div>
+      <FolderPicker
+        value={outputDirectory}
+        onChange={setOutputDirectory}
+        label="产出目录"
+        placeholder="点击选择文件夹"
+        required
+      />
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">

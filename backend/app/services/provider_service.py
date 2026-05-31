@@ -36,7 +36,8 @@ class ProviderService:
             api_key_encrypted=crypto_service.encrypt(data.api_key),
             default_model=data.default_model,
             default_temperature=data.default_temperature,
-            default_max_tokens=data.default_max_tokens,
+            default_max_input_tokens=data.default_max_input_tokens,
+            default_max_output_tokens=data.default_max_output_tokens,
             enabled=True,
         )
         
