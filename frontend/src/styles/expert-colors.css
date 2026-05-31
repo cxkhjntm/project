@@ -1,0 +1,67 @@
+:root {
+  --expert-host: #6B7280;
+  --expert-host-bg: #F3F4F6;
+  --expert-host-bg-light: #F9FAFB;
+
+  --expert-product: #3B82F6;
+  --expert-product-bg: #DBEAFE;
+  --expert-product-bg-light: #EFF6FF;
+
+  --expert-architect: #8B5CF6;
+  --expert-architect-bg: #EDE9FE;
+  --expert-architect-bg-light: #F5F3FF;
+
+  --expert-backend: #10B981;
+  --expert-backend-bg: #D1FAE5;
+  --expert-backend-bg-light: #ECFDF5;
+
+  --expert-doc: #6366F1;
+  --expert-doc-bg: #E0E7FF;
+  --expert-doc-bg-light: #EEF2FF;
+}
+
+@keyframes color-bar-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0.6;
+  }
+}
+
+.thinking-color-bar {
+  width: 3px;
+  border-radius: 9999px;
+  animation: color-bar-breathe 2s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #E5E7EB 25%, #F3F4F6 50%, #E5E7EB 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  will-change: background-position;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
