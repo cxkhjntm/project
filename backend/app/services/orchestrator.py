@@ -476,6 +476,24 @@ class Orchestrator:
             return cleaned[:100]
         meaningful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 10]
         return max(meaningful, key=len)[:100] if meaningful else None
+        return check_convergence_keywords(self.all_messages)
+
+    def _extract_key_point(self, content: str) -> Optional[str]:
+        skip_patterns = [
+            r'^(关于|针对|对于|关于这个|说到|谈到|提及|涉及|回到)',
+            r'^#{1,6}\s', r'^[-*]\s', r'^```', r'^\s*$', r'^>\s',
+        ]
+        lines = content.split('\n')
+        for line in lines:
+            trimmed = line.strip()
+            if len(trimmed) < 15:
+                continue
+            if any(re.match(p, trimmed) for p in skip_patterns):
+                continue
+            cleaned = trimmed.replace('**', '').replace('*', '').replace('`', '')
+            return cleaned[:100]
+        meaningful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 10]
+        return max(meaningful, key=len)[:100] if meaningful else None
 
 
 def create_orchestrator(
