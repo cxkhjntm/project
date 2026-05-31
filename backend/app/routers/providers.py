@@ -45,17 +45,19 @@ async def create_provider(
 async def list_providers(
     session: AsyncSession = Depends(get_session),
 ) -> List[ProviderResponse]:
-    """List all providers."""
     providers = await provider_service.get_all(session)
-    return [
-        ProviderResponse(
+    result = []
+    for p in providers:
+        try:
+            masked = crypto_service.mask_key(crypto_service.decrypt(p.api_key_encrypted))
+        except Exception:
+            masked = "***"
+        result.append(ProviderResponse(
             id=p.id,
             name=p.name,
             type=p.type,
             base_url=p.base_url,
-            api_key_masked=crypto_service.mask_key(
-                crypto_service.decrypt(p.api_key_encrypted)
-            ),
+            api_key_masked=masked,
             default_model=p.default_model,
             default_temperature=p.default_temperature,
             default_max_input_tokens=p.default_max_input_tokens,
@@ -63,9 +65,8 @@ async def list_providers(
             enabled=p.enabled,
             created_at=p.created_at,
             updated_at=p.updated_at,
-        )
-        for p in providers
-    ]
+        ))
+    return result
 
 
 @router.get("/{provider_id}", response_model=ProviderResponse)
@@ -73,19 +74,21 @@ async def get_provider(
     provider_id: str,
     session: AsyncSession = Depends(get_session),
 ) -> ProviderResponse:
-    """Get a provider by ID."""
     provider = await provider_service.get_by_id(session, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
+    
+    try:
+        masked = crypto_service.mask_key(crypto_service.decrypt(provider.api_key_encrypted))
+    except Exception:
+        masked = "***"
     
     return ProviderResponse(
         id=provider.id,
         name=provider.name,
         type=provider.type,
         base_url=provider.base_url,
-        api_key_masked=crypto_service.mask_key(
-            crypto_service.decrypt(provider.api_key_encrypted)
-        ),
+        api_key_masked=masked,
         default_model=provider.default_model,
         default_temperature=provider.default_temperature,
         default_max_input_tokens=provider.default_max_input_tokens,
@@ -102,19 +105,21 @@ async def update_provider(
     data: ProviderUpdate,
     session: AsyncSession = Depends(get_session),
 ) -> ProviderResponse:
-    """Update a provider."""
     provider = await provider_service.update(session, provider_id, data)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
+    
+    try:
+        masked = crypto_service.mask_key(crypto_service.decrypt(provider.api_key_encrypted))
+    except Exception:
+        masked = "***"
     
     return ProviderResponse(
         id=provider.id,
         name=provider.name,
         type=provider.type,
         base_url=provider.base_url,
-        api_key_masked=crypto_service.mask_key(
-            crypto_service.decrypt(provider.api_key_encrypted)
-        ),
+        api_key_masked=masked,
         default_model=provider.default_model,
         default_temperature=provider.default_temperature,
         default_max_input_tokens=provider.default_max_input_tokens,
