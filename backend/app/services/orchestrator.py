@@ -510,7 +510,11 @@ class Orchestrator:
         if not provider:
             raise ValueError(f"Provider not found: {provider_id}")
 
-        return crypto_service.decrypt(provider.api_key_encrypted)
+        try:
+            return crypto_service.decrypt(provider.api_key_encrypted)
+        except Exception as e:
+            logger.error("Failed to decrypt API key", provider_id=provider_id, error=str(e))
+            raise ValueError(f"Failed to decrypt API key for provider {provider_id}") from e
 
     async def _update_rolling_summary(self) -> None:
         from app.services.message_service import message_service
