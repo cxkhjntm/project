@@ -76,8 +76,8 @@ async def start_discussion(
     
     async def run_discussion():
         async with async_session_factory() as bg_session:
+            merged_room = None
             try:
-                # Merge room into the new session so ORM state is fresh
                 merged_room = await bg_session.merge(room)
 
                 orchestrator = create_orchestrator(
@@ -93,8 +93,9 @@ async def start_discussion(
 
             except Exception as e:
                 logger.error("Discussion failed", error=str(e))
-                merged_room.status = "failed"
-                await bg_session.commit()
+                if merged_room:
+                    merged_room.status = "failed"
+                    await bg_session.commit()
             finally:
                 await event_queue.put(None)
     
