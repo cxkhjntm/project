@@ -71,6 +71,8 @@ class SSEEventType(str, Enum):
     DONE = "done"
     STATUS = "status"
     COST_UPDATE = "cost_update"
+    STATUS = "status"
+    COST_UPDATE = "cost_update"
 
 
 class Orchestrator:
@@ -402,17 +404,6 @@ class Orchestrator:
                 "key_point": key_point,
             })
 
-            await self.emit_event(SSEEventType.MESSAGE, {
-                "id": message.id,
-                "room_id": self.room_id,
-                "sender_type": "expert",
-                "sender_id": role_card_id,
-                "content": response.content,
-                "citations": [],
-                "round": self.current_round,
-                "key_point": key_point,
-            })
-
         except ModelClientError as e:
             logger.error(
                 "Expert turn failed",
@@ -467,24 +458,6 @@ class Orchestrator:
             return True
         if self.current_round < 2:
             return False
-        return check_convergence_keywords(self.all_messages)
-
-    def _extract_key_point(self, content: str) -> Optional[str]:
-        skip_patterns = [
-            r'^(关于|针对|对于|关于这个|说到|谈到|提及|涉及|回到)',
-            r'^#{1,6}\s', r'^[-*]\s', r'^```', r'^\s*$', r'^>\s',
-        ]
-        lines = content.split('\n')
-        for line in lines:
-            trimmed = line.strip()
-            if len(trimmed) < 15:
-                continue
-            if any(re.match(p, trimmed) for p in skip_patterns):
-                continue
-            cleaned = trimmed.replace('**', '').replace('*', '').replace('`', '')
-            return cleaned[:100]
-        meaningful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 10]
-        return max(meaningful, key=len)[:100] if meaningful else None
         return check_convergence_keywords(self.all_messages)
 
     def _extract_key_point(self, content: str) -> Optional[str]:
