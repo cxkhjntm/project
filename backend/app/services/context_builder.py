@@ -1,23 +1,35 @@
-"""Context builder for discussion prompts."""
+"""Context builder for discussion prompts with token budget management."""
 
 from typing import Any, Dict, List, Optional
 
 from app.utils.logger import get_logger
+from app.utils.token_counter import (
+    TokenBudget,
+    estimate_tokens,
+    check_budget,
+    get_degradation_action,
+    TOKEN_ESTIMATES,
+)
 
 logger = get_logger(__name__)
 
+# Role definition compression threshold
+FULL_ROLE_ROUNDS = 2
+
 
 class ContextBuilder:
-    """Builds context for LLM prompts in discussions."""
+    """Builds context for LLM prompts with token budget management."""
 
     def __init__(
         self,
         max_file_tokens: int = 4000,
         max_summary_tokens: int = 1000,
+        budget: Optional[TokenBudget] = None,
     ):
         self.max_file_tokens = max_file_tokens
         self.max_summary_tokens = max_summary_tokens
-        self.chars_per_token = 4
+        self.chars_per_token = TOKEN_ESTIMATES["english_chars_per_token"]
+        self.budget = budget or TokenBudget()
 
     def build_expert_prompt(
         self,
@@ -29,30 +41,16 @@ class ContextBuilder:
         total_rounds: int,
         additional_context: Optional[str] = None,
     ) -> str:
-        expertise = ", ".join(role.get("expertise", []))
-        responsibilities = "\n".join(
-            f"- {r}" for r in role.get("responsibilities", [])
+        role_def = self._build_role_definition(role, current_round)
+        file_contents = self._build_file_contents_with_budget(
+            shared_sources, int(self.budget.shared_data * self.chars_per_token)
         )
-        constraints = "\n".join(
-            f"- {c}" for c in role.get("constraints", [])
-        )
-
-        file_contents = self._build_file_contents(shared_sources)
 
         round_context = f"当前是第 {current_round}/{total_rounds} 轮讨论。"
         if current_round >= total_rounds - 1:
             round_context += "\n注意：这是最后几轮讨论，请开始收敛观点，准备总结。"
 
-        prompt = f"""你是{role['name']}，一位{role['description']}。
-
-## 专业能力
-{expertise}
-
-## 职责
-{responsibilities}
-
-## 约束
-{constraints if constraints else "无特殊约束"}
+        prompt = f"""{role_def}
 
 ## 本次任务
 目标：{goal}
@@ -75,6 +73,15 @@ class ContextBuilder:
 
         if additional_context:
             prompt += f"\n\n## 补充信息\n{additional_context}"
+
+        estimated = estimate_tokens(prompt)
+        budget_check = check_budget(estimated, self.budget)
+        if not budget_check["within_budget"]:
+            logger.warning(
+                "Prompt exceeds token budget",
+                estimated=estimated,
+                usage_pct=budget_check["usage_pct"],
+            )
 
         return prompt
 
@@ -146,6 +153,120 @@ class ContextBuilder:
 
         return prompt
 
+    def _build_role_definition(self, role: Dict[str, Any], current_round: int) -> str:
+        if current_round <= FULL_ROLE_ROUNDS:
+            expertise = ", ".join(role.get("expertise", []))
+            responsibilities = "\n".join(f"- {r}" for r in role.get("responsibilities", []))
+            constraints = "\n".join(f"- {c}" for c in role.get("constraints", []))
+            return f"""你是{role['name']}，一位{role.get('description', '专家')}。
+
+## 专业能力
+{expertise}
+
+## 职责
+{responsibilities}
+
+## 约束
+{constraints if constraints else "无特殊约束"}"""
+        else:
+            constraints = role.get("constraints", [])
+            constraint_text = constraints[0] if constraints else ""
+            return f"""你是{role['name']}。{role.get('description', '专家')}
+{f'核心约束：{constraint_text}' if constraint_text else ''}"""
+
+    def _build_round_context(self, current_round: int, total_rounds: int) -> str:
+        context = f"当前是第 {current_round}/{total_rounds} 轮讨论。"
+        if current_round >= total_rounds - 1:
+            context += "\n注意：这是最后几轮讨论，请开始收敛观点，准备总结。"
+        elif current_round == 1:
+            context += "\n这是第一轮讨论，请从你的专业角度给出初步观点。"
+        return context
+
+    def _build_messages_context(self, messages: Optional[List[Dict[str, Any]]]) -> str:
+        if not messages:
+            return ""
+        parts = ["## 最近讨论"]
+        for msg in messages[-6:]:
+            sender = msg.get("sender_id", msg.get("sender_type", "未知"))
+            content = msg.get("content", "")
+            if len(content) > 200:
+                content = content[:200] + "..."
+            parts.append(f"[{sender}]: {content}")
+        return "\n".join(parts)
+
+    def _build_decisions_context(self, decisions: Optional[List[str]]) -> str:
+        if not decisions:
+            return ""
+        parts = ["## 已达成共识"]
+        for d in decisions:
+            parts.append(f"- {d}")
+        return "\n".join(parts)
+
+    def _apply_degradation(self, prompt: str, estimated_tokens: int) -> str:
+        action = get_degradation_action(estimated_tokens, self.budget)
+        if action:
+            logger.info("Applying degradation", action=action[0], description=action[1])
+            max_chars = self.budget.total * int(self.chars_per_token)
+            if len(prompt) > max_chars:
+                prompt = prompt[:max_chars] + "\n\n...(内容已截断以符合Token预算)"
+        return prompt
+
+    def _build_role_definition(self, role: Dict[str, Any], current_round: int) -> str:
+        if current_round <= FULL_ROLE_ROUNDS:
+            expertise = ", ".join(role.get("expertise", []))
+            responsibilities = "\n".join(
+                f"- {r}" for r in role.get("responsibilities", [])
+            )
+            constraints = "\n".join(
+                f"- {c}" for c in role.get("constraints", [])
+            )
+
+            return f"""你是{role['name']}，一位{role.get('description', '专家')}。
+
+## 专业能力
+{expertise}
+
+## 职责
+{responsibilities}
+
+## 约束
+{constraints if constraints else "无特殊约束"}"""
+        else:
+            constraints = role.get("constraints", [])
+            constraint_text = constraints[0] if constraints else ""
+
+            return f"""你是{role['name']}。{role.get('description', '专家')}
+{f'核心约束：{constraint_text}' if constraint_text else ''}"""
+
+    def _build_file_contents_with_budget(
+        self, shared_sources: List[Dict[str, Any]], max_chars: int
+    ) -> str:
+        if not shared_sources:
+            return ""
+
+        sections = []
+        total_chars = 0
+
+        for source in shared_sources:
+            content = source.get("content", "")
+            path = source.get("path", "粘贴的文本")
+
+            if not content:
+                continue
+
+            if total_chars + len(content) > max_chars:
+                remaining = max_chars - total_chars
+                if remaining > 100:
+                    content = content[:remaining] + "\n...(内容已截断)"
+                else:
+                    break
+
+            section = f"### 来源: {path}\n```\n{content}\n```"
+            sections.append(section)
+            total_chars += len(content)
+
+        return "\n\n".join(sections)
+
     def _build_file_contents(self, shared_sources: List[Dict[str, Any]]) -> str:
         if not shared_sources:
             return ""
@@ -173,6 +294,29 @@ class ContextBuilder:
             sections.append(section)
             total_chars += len(content)
 
+        return "\n\n".join(sections)
+
+    def _build_file_contents_with_budget(
+        self, shared_sources: List[Dict[str, Any]], max_chars: int
+    ) -> str:
+        if not shared_sources:
+            return ""
+        sections = []
+        total_chars = 0
+        for source in shared_sources:
+            content = source.get("content", "")
+            path = source.get("path", "粘贴的文本")
+            if not content:
+                continue
+            if total_chars + len(content) > max_chars:
+                remaining = max_chars - total_chars
+                if remaining > 100:
+                    content = content[:remaining] + "\n...(内容已截断)"
+                else:
+                    break
+            section = f"### 来源: {path}\n```\n{content}\n```"
+            sections.append(section)
+            total_chars += len(content)
         return "\n\n".join(sections)
 
     def truncate_content(self, content: str, max_tokens: Optional[int] = None) -> str:
