@@ -6,7 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.room import Room, RoomParticipant
-from app.routers.discussion import start_discussion, get_messages, stream_messages
+from app.routers.discussion import start_discussion, get_messages, stream_messages, control_discussion, get_discussion_status
+from app.schemas.discussion import DiscussionControlRequest, DiscussionAction
 
 
 @pytest.fixture
@@ -111,3 +112,181 @@ async def test_start_discussion_completed_is_allowed(sample_room):
     response = await start_discussion("test-room-id", session)
     assert response is not None
     assert sample_room.status == "running"
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_start(sample_room):
+    sample_room.status = "draft"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.START)
+
+    result = await control_discussion("test-room-id", request, session)
+
+    assert result["status"] == "running"
+    assert result["action"] == "start"
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_start_invalid_status(sample_room):
+    sample_room.status = "running"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.START)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await control_discussion("test-room-id", request, session)
+
+    assert exc_info.value.status_code == 400
+    assert "draft" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_pause(sample_room):
+    sample_room.status = "running"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.PAUSE)
+
+    result = await control_discussion("test-room-id", request, session)
+
+    assert result["status"] == "paused"
+    assert result["action"] == "pause"
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_pause_invalid_status(sample_room):
+    sample_room.status = "draft"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.PAUSE)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await control_discussion("test-room-id", request, session)
+
+    assert exc_info.value.status_code == 400
+    assert "not running" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_resume(sample_room):
+    sample_room.status = "paused"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.RESUME)
+
+    result = await control_discussion("test-room-id", request, session)
+
+    assert result["status"] == "running"
+    assert result["action"] == "resume"
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_resume_invalid_status(sample_room):
+    sample_room.status = "running"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.RESUME)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await control_discussion("test-room-id", request, session)
+
+    assert exc_info.value.status_code == 400
+    assert "not paused" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_stop_from_running(sample_room):
+    sample_room.status = "running"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.STOP)
+
+    result = await control_discussion("test-room-id", request, session)
+
+    assert result["status"] == "completed"
+    assert result["action"] == "stop"
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_stop_from_paused(sample_room):
+    sample_room.status = "paused"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.STOP)
+
+    result = await control_discussion("test-room-id", request, session)
+
+    assert result["status"] == "completed"
+    assert result["action"] == "stop"
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_stop_invalid_status(sample_room):
+    sample_room.status = "draft"
+    session = _mock_session_with_room(sample_room)
+    request = DiscussionControlRequest(action=DiscussionAction.STOP)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await control_discussion("test-room-id", request, session)
+
+    assert exc_info.value.status_code == 400
+    assert "cannot be stopped" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_control_discussion_room_not_found():
+    session = _mock_session_with_room(None)
+    request = DiscussionControlRequest(action=DiscussionAction.START)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await control_discussion("nonexistent-id", request, session)
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_discussion_status(sample_room):
+    sample_room.status = "running"
+    session = _mock_session_with_room(sample_room)
+
+    result = await get_discussion_status("test-room-id", session)
+
+    assert result.room_id == "test-room-id"
+    assert result.status == "running"
+    assert result.total_rounds == 5
+    assert result.is_paused is False
+    assert result.can_pause is True
+    assert result.can_resume is False
+    assert result.can_stop is True
+
+
+@pytest.mark.asyncio
+async def test_get_discussion_status_paused(sample_room):
+    sample_room.status = "paused"
+    session = _mock_session_with_room(sample_room)
+
+    result = await get_discussion_status("test-room-id", session)
+
+    assert result.status == "paused"
+    assert result.is_paused is True
+    assert result.can_pause is False
+    assert result.can_resume is True
+    assert result.can_stop is True
+
+
+@pytest.mark.asyncio
+async def test_get_discussion_status_draft(sample_room):
+    sample_room.status = "draft"
+    session = _mock_session_with_room(sample_room)
+
+    result = await get_discussion_status("test-room-id", session)
+
+    assert result.status == "draft"
+    assert result.is_paused is False
+    assert result.can_pause is False
+    assert result.can_resume is False
+    assert result.can_stop is False
+
+
+@pytest.mark.asyncio
+async def test_get_discussion_status_room_not_found():
+    session = _mock_session_with_room(None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_discussion_status("nonexistent-id", session)
+
+    assert exc_info.value.status_code == 404

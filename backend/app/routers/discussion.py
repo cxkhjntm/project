@@ -13,6 +13,7 @@ from app.database import get_session, async_session_factory
 from app.models.room import Room, RoomParticipant
 from app.models.role_card import RoleCard
 from app.models.provider import Provider
+from app.schemas.discussion import DiscussionControlRequest, DiscussionStatusResponse
 from app.schemas.message import MessageResponse
 from app.services.message_service import message_service
 from app.services.orchestrator import Orchestrator, SSEEventType, create_orchestrator
@@ -235,3 +236,60 @@ async def stream_messages(
             await asyncio.sleep(1)
     
     return EventSourceResponse(event_generator())
+
+
+@router.post("/{room_id}/control")
+async def control_discussion(
+    room_id: str,
+    request: DiscussionControlRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(Room).where(Room.id == room_id))
+    room = result.scalar_one_or_none()
+
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if request.action == "start":
+        if room.status != "draft":
+            raise HTTPException(status_code=400, detail="Room is not in draft state")
+        room.status = "running"
+    elif request.action == "pause":
+        if room.status != "running":
+            raise HTTPException(status_code=400, detail="Room is not running")
+        room.status = "paused"
+    elif request.action == "resume":
+        if room.status != "paused":
+            raise HTTPException(status_code=400, detail="Room is not paused")
+        room.status = "running"
+    elif request.action == "stop":
+        if room.status not in ("running", "paused"):
+            raise HTTPException(status_code=400, detail="Room cannot be stopped")
+        room.status = "completed"
+
+    await session.commit()
+
+    return {"status": room.status, "action": request.action}
+
+
+@router.get("/{room_id}/status", response_model=DiscussionStatusResponse)
+async def get_discussion_status(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(Room).where(Room.id == room_id))
+    room = result.scalar_one_or_none()
+
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    return DiscussionStatusResponse(
+        room_id=room.id,
+        status=room.status,
+        current_round=0,
+        total_rounds=room.round_limit,
+        is_paused=room.status == "paused",
+        can_pause=room.status == "running",
+        can_resume=room.status == "paused",
+        can_stop=room.status in ("running", "paused"),
+    )
