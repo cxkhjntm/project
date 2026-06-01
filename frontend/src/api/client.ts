@@ -12,6 +12,17 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export interface DiscussionControlStatus {
+  room_id: string;
+  status: string;
+  current_round: number;
+  total_rounds: number;
+  is_paused: boolean;
+  can_pause: boolean;
+  can_resume: boolean;
+  can_stop: boolean;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -187,6 +198,22 @@ class ApiClient {
 
   async getRoomArtifacts(roomId: string): Promise<unknown[]> {
     return this.request(`/rooms/${roomId}/artifacts`);
+  }
+
+  // === Discussion Control ===
+
+  async controlDiscussion(
+    roomId: string,
+    action: 'start' | 'pause' | 'resume' | 'stop'
+  ): Promise<{ message: string }> {
+    return this.request(`/rooms/${roomId}/control`, {
+      method: 'POST',
+      body: { action },
+    });
+  }
+
+  async getDiscussionStatus(roomId: string): Promise<DiscussionControlStatus> {
+    return this.request(`/rooms/${roomId}/status`);
   }
 
   // === Filesystem ===
