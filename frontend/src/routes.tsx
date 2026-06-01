@@ -5,15 +5,9 @@ import SettingsPage from '@/pages/SettingsPage';
 import RoleCardsPage from '@/pages/RoleCardsPage';
 import RoomsPage from '@/pages/RoomsPage';
 import RoomCreatePage from '@/pages/RoomCreatePage';
+import RoomDetailPage from '@/pages/RoomDetailPage';
 import DiscussionPage from '@/pages/DiscussionPage';
 import ArtifactPage from '@/pages/ArtifactPage';
-
-const PlaceholderPage = ({ title }: { title: string }) => (
-  <div className="text-center py-12">
-    <h2 className="text-2xl font-semibold text-gray-900 mb-2">{title}</h2>
-    <p className="text-gray-600">此页面正在开发中...</p>
-  </div>
-);
 
 export const router = createBrowserRouter([
   {
@@ -25,7 +19,7 @@ export const router = createBrowserRouter([
       { path: 'role-cards', element: <RoleCardsPage /> },
       { path: 'rooms', element: <RoomsPage /> },
       { path: 'rooms/create', element: <RoomCreatePage /> },
-      { path: 'rooms/:id', element: <PlaceholderPage title="讨论室详情" /> },
+      { path: 'rooms/:roomId', element: <RoomDetailPage /> },
     ],
   },
   {

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 
 interface Citation {
-  file: string;
+  source_id?: string;
+  file?: string;
   snippet?: string;
 }
 
@@ -21,7 +22,7 @@ export const CitationBlock: React.FC<CitationBlockProps> = ({ citations }) => {
         className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
       >
         <span>📎</span>
-        <span>引用自：{citations.map(c => c.file).join(', ')}</span>
+        <span>引用自：{citations.map(c => c.file || '未知来源').join(', ')}</span>
         <span className="ml-1">{isExpanded ? '▼' : '▶'}</span>
       </button>
 
@@ -29,7 +30,7 @@ export const CitationBlock: React.FC<CitationBlockProps> = ({ citations }) => {
         <div className="mt-2 space-y-2">
           {citations.map((citation, index) => (
             <div key={index} className="bg-gray-50 rounded px-3 py-2 text-xs">
-              <div className="font-medium text-gray-600 mb-1">📎 {citation.file}</div>
+              <div className="font-medium text-gray-600 mb-1">📎 {citation.file || '未知来源'}</div>
               {citation.snippet && (
                 <div className="text-gray-500 italic">"{citation.snippet}"</div>
               )}

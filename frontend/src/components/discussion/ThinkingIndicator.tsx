@@ -19,7 +19,6 @@ const EXPERT_COLOR_MAP: Record<string, string> = {
 };
 
 export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
-  speakerId,
   speakerName,
   speakerEmoji = '🤖',
   thinkingVerb = '正在思考',

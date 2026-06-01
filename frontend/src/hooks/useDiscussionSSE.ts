@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   DiscussionMessage,
-  DoneEvent,
   ErrorEvent,
   ThinkingEvent,
   StatusEvent,
@@ -112,7 +111,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
 
       eventSource.addEventListener('done', (event) => {
         try {
-          const data: DoneEvent = JSON.parse(event.data);
+          JSON.parse(event.data);
           setIsComplete(true);
           setStatus('completed');
           closeConnection();

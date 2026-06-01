@@ -137,6 +137,7 @@ class Orchestrator:
         self.total_tokens = 0
         self.all_messages: List[Dict[str, Any]] = []
         self.decisions: List[str] = []
+        self.mode = room.mode if hasattr(room, 'mode') else "code_document"
         self.all_messages: List[Dict[str, Any]] = []
 
     def should_continue(self) -> bool:
@@ -271,6 +272,7 @@ class Orchestrator:
             current_round=self.current_round,
             total_rounds=self.max_rounds,
             experts=[{"name": p["name"]} for p in self.participants],
+            mode=self.mode,
         )
 
         if not self.participants:
@@ -375,6 +377,7 @@ class Orchestrator:
             rolling_summary=self.rolling_summary,
             current_round=self.current_round,
             total_rounds=self.max_rounds,
+            mode=self.mode,
             additional_context=additional_context,
         )
 

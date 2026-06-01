@@ -1,5 +1,6 @@
 """Context builder for discussion prompts with token budget management."""
 
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from app.utils.logger import get_logger
@@ -15,6 +16,93 @@ logger = get_logger(__name__)
 
 # Role definition compression threshold
 FULL_ROLE_ROUNDS = 2
+
+
+class DiscussionMode(str, Enum):
+    """讨论模式枚举"""
+
+    CODE_DOCUMENT = "code_document"
+    DOCUMENT = "document"
+    CODE = "code"
+
+
+MODE_TEMPLATES: Dict[DiscussionMode, Dict[str, str]] = {
+    DiscussionMode.CODE_DOCUMENT: {
+        "name": "代码文档模式",
+        "description": "产出适合交给 AI 编辑器或开发人员执行的 Markdown 技术方案",
+        "expert_instruction": """
+请从你的专业角度，对当前议题发表意见。
+要求：
+- 引用共享资料中的具体内容时，请标注来源文件名
+- 区分"资料中明确的信息"和"你的推断/建议"
+- 回复控制在 500 字以内
+- 如果是最后几轮，请重点总结你的核心观点
+- 重点关注技术实现方案、架构设计、接口定义""",
+        "synthesizer_chapters": """
+## 1. 背景与目标
+## 2. 当前资料理解
+## 3. 需求拆解
+## 4. 总体方案
+## 5. 模块设计
+## 6. 数据结构 / 接口设计
+## 7. 实施步骤
+## 8. 测试与验收标准
+## 9. 风险与取舍
+## 10. 后续迭代建议""",
+        "output_format": "Markdown 技术方案文档",
+    },
+    DiscussionMode.DOCUMENT: {
+        "name": "纯文档模式",
+        "description": "产出适合阅读、汇报、归档的文档或表格",
+        "expert_instruction": """
+请从你的专业角度，对当前议题发表意见。
+要求：
+- 引用共享资料中的具体内容时，请标注来源文件名
+- 区分"资料中明确的信息"和"你的推断/建议"
+- 回复控制在 500 字以内
+- 如果是最后几轮，请重点总结你的核心观点
+- 重点关注可读性、结论明确、结构清晰、适合汇报""",
+        "synthesizer_chapters": """
+## 1. 执行摘要
+## 2. 背景与目标
+## 3. 现状分析
+## 4. 核心发现
+## 5. 结论与建议
+## 6. 数据来源说明
+## 7. 附录""",
+        "output_format": "可阅读的文档报告",
+    },
+    DiscussionMode.CODE: {
+        "name": "代码模式",
+        "description": "产出核心代码草案，用于快速判断技术方向是否可行",
+        "expert_instruction": """
+请从你的专业角度，对当前议题发表意见。
+要求：
+- 引用共享资料中的具体内容时，请标注来源文件名
+- 区分"资料中明确的信息"和"你的推断/建议"
+- 回复控制在 500 字以内
+- 如果是最后几轮，请重点总结你的核心观点
+- 重点关注核心代码实现、算法设计、数据结构""",
+        "synthesizer_chapters": """
+## 1. 实现概述
+## 2. 核心代码
+## 3. 使用示例
+## 4. 依赖说明
+## 5. 集成方式
+## 6. 注意事项
+## 7. 测试建议""",
+        "output_format": "核心代码草案和说明文档",
+    },
+}
+
+
+def _parse_mode(mode: str) -> DiscussionMode:
+    """Parse mode string to DiscussionMode enum, fallback to CODE_DOCUMENT."""
+    try:
+        return DiscussionMode(mode)
+    except ValueError:
+        logger.warning("Invalid discussion mode '%s', falling back to code_document", mode)
+        return DiscussionMode.CODE_DOCUMENT
 
 
 class ContextBuilder:
@@ -39,8 +127,12 @@ class ContextBuilder:
         rolling_summary: str,
         current_round: int,
         total_rounds: int,
+        mode: str = "code_document",
         additional_context: Optional[str] = None,
     ) -> str:
+        mode_enum = _parse_mode(mode)
+        mode_config = MODE_TEMPLATES[mode_enum]
+
         role_def = self._build_role_definition(role, current_round)
         file_contents = self._build_file_contents_with_budget(
             shared_sources, int(self.budget.shared_data * self.chars_per_token)
@@ -54,7 +146,7 @@ class ContextBuilder:
 
 ## 本次任务
 目标：{goal}
-工作模式：代码文档模式
+工作模式：{mode_config['name']}
 {round_context}
 
 ## 共享资料
@@ -64,12 +156,7 @@ class ContextBuilder:
 {rolling_summary if rolling_summary else "这是讨论的开始，还没有已有讨论。"}
 
 ## 本轮要求
-请从你的专业角度，对当前议题发表意见。
-要求：
-- 引用共享资料中的具体内容时，请标注来源文件名
-- 区分"资料中明确的信息"和"你的推断/建议"
-- 回复控制在 500 字以内
-- 如果是最后几轮，请重点总结你的核心观点"""
+{mode_config['expert_instruction'].strip()}"""
 
         if additional_context:
             prompt += f"\n\n## 补充信息\n{additional_context}"
@@ -93,14 +180,18 @@ class ContextBuilder:
         current_round: int,
         total_rounds: int,
         experts: List[Dict[str, Any]],
+        mode: str = "code_document",
     ) -> str:
+        mode_enum = _parse_mode(mode)
+        mode_config = MODE_TEMPLATES[mode_enum]
+
         expert_names = ", ".join(e["name"] for e in experts)
         file_contents = self._build_file_contents(shared_sources)
 
         prompt = f"""你是专家群聊主持人。你的任务是控制讨论流程，而不是替专家完成全部内容。
 
 本次任务目标：{goal}
-当前工作模式：代码文档模式
+当前工作模式：{mode_config['name']}（{mode_config['description']}）
 当前轮次：第 {current_round}/{total_rounds} 轮
 参与专家：{expert_names}
 
@@ -124,8 +215,12 @@ class ContextBuilder:
         self,
         goal: str,
         full_discussion: str,
+        mode: str = "code_document",
     ) -> str:
-        prompt = f"""你是文档专家。请根据以下讨论记录，生成一份结构化的 Markdown 技术方案文档。
+        mode_enum = _parse_mode(mode)
+        mode_config = MODE_TEMPLATES[mode_enum]
+
+        prompt = f"""你是文档专家。请根据以下讨论记录，生成一份{mode_config['output_format']}。
 
 ## 讨论记录
 {full_discussion}
@@ -134,16 +229,7 @@ class ContextBuilder:
 请按以下结构生成文档：
 
 # {goal}
-
-## 1. 背景与目标
-## 2. 需求拆解
-## 3. 总体方案
-## 4. 模块设计
-## 5. 数据结构 / 接口设计
-## 6. 实施步骤
-## 7. 测试与验收标准
-## 8. 风险与取舍
-## 9. 后续迭代建议
+{mode_config['synthesizer_chapters']}
 
 要求：
 - 内容必须来自讨论记录，不要编造
@@ -273,7 +359,7 @@ class ContextBuilder:
 
         sections = []
         total_chars = 0
-        max_chars = self.max_file_tokens * self.chars_per_token
+        max_chars = int(self.max_file_tokens * self.chars_per_token)
 
         for source in shared_sources:
             content = source.get("content", "")
@@ -320,7 +406,7 @@ class ContextBuilder:
         return "\n\n".join(sections)
 
     def truncate_content(self, content: str, max_tokens: Optional[int] = None) -> str:
-        max_chars = (max_tokens or self.max_file_tokens) * self.chars_per_token
+        max_chars = int((max_tokens or self.max_file_tokens) * self.chars_per_token)
 
         if len(content) <= max_chars:
             return content

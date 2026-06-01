@@ -303,7 +303,7 @@ class TestGenerateArtifact:
             content = f.read()
 
         # Check Markdown structure
-        assert content.startswith("# ")  # Title
+        assert "> 📋" in content  # Header annotation
         assert "## " in content  # Sections
         assert "---" in content  # Horizontal rules or metadata separators
 

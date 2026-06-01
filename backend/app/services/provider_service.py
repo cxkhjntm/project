@@ -105,6 +105,7 @@ class ProviderService:
             setattr(provider, field, value)
         
         await session.flush()
+        await session.refresh(provider)
         
         logger.info("Updated provider", provider_id=provider.id)
         return provider

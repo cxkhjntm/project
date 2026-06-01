@@ -66,6 +66,7 @@ async def synthesize_artifact(
             goal=room.goal,
             messages=message_dicts,
             output_directory=room.output_directory,
+            mode=room.mode,
         )
     except ArtifactWriterError as e:
         logger.error("Artifact generation failed", error=str(e))
