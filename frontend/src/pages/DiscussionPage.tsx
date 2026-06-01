@@ -9,7 +9,14 @@ interface RoomData {
   name: string;
   goal: string;
   round_limit: number;
+  mode: string;
 }
+
+const modeLabels: Record<string, { label: string; color: string }> = {
+  code_document: { label: '代码文档', color: 'bg-blue-100 text-blue-700' },
+  document: { label: '纯文档', color: 'bg-green-100 text-green-700' },
+  code: { label: '代码', color: 'bg-purple-100 text-purple-700' },
+};
 
 export default function DiscussionPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -47,9 +54,14 @@ export default function DiscussionPage() {
     }
   }, [roomId, synthesize, navigate]);
 
-  useEffect(() => {
+  const handleStartDiscussion = useCallback(() => {
     if (roomId) {
       startDiscussion(roomId);
+    }
+  }, [roomId, startDiscussion]);
+
+  useEffect(() => {
+    if (roomId) {
       apiClient.getRoom(roomId).then((room) => {
         setRoomData(room as RoomData);
       }).catch((err) => {
@@ -57,7 +69,7 @@ export default function DiscussionPage() {
       });
     }
     return () => reset();
-  }, [roomId, startDiscussion, reset]);
+  }, [roomId, reset]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -100,6 +112,11 @@ export default function DiscussionPage() {
             <p className="text-sm text-gray-500">{roomData?.goal || `Room: ${roomId}`}</p>
           </div>
           <div className="flex items-center gap-3">
+            {roomData?.mode && (
+              <span className={`text-xs px-2 py-1 rounded-full ${modeLabels[roomData.mode]?.color || 'bg-gray-100 text-gray-700'}`}>
+                {modeLabels[roomData.mode]?.label || roomData.mode}
+              </span>
+            )}
             {totalTokens > 0 && (
               <span className="text-xs text-gray-500">🔤 {totalTokens.toLocaleString()} tokens</span>
             )}
@@ -113,7 +130,8 @@ export default function DiscussionPage() {
             >
               {status === 'running' ? '🟢 进行中' :
                status === 'completed' ? '✅ 已完成' :
-               status === 'failed' ? '❌ 失败' : '⏳ 连接中'}
+               status === 'failed' ? '❌ 失败' :
+               status === 'idle' ? '⚪ 待开始' : '⏳ 连接中'}
             </span>
             {isComplete && (
               <>
@@ -146,7 +164,19 @@ export default function DiscussionPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        {messages.length === 0 && !error && (
+        {status === 'idle' && messages.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-gray-500 mb-4">点击开始按钮启动讨论</p>
+            <button
+              onClick={handleStartDiscussion}
+              className="px-6 py-3 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              开始讨论
+            </button>
+          </div>
+        )}
+
+        {status !== 'idle' && messages.length === 0 && !error && (
           <div className="text-center text-gray-500 py-8 text-sm">讨论即将开始...</div>
         )}
 
