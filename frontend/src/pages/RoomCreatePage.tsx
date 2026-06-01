@@ -13,8 +13,8 @@ export default function RoomCreatePage() {
     try {
       setIsSubmitting(true);
       setError(null);
-      await apiClient.createRoom(data);
-      navigate('/rooms');
+      const room = await apiClient.createRoom(data) as { id: string };
+      navigate(`/rooms/${room.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建讨论室失败');
     } finally {

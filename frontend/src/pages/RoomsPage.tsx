@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import type { Room } from '@/types';
 import RoomList from '@/components/room/RoomList';
 
 export default function RoomsPage() {
+  const navigate = useNavigate();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +34,10 @@ export default function RoomsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除讨论室失败');
     }
+  };
+
+  const handleRoomClick = (roomId: string) => {
+    navigate(`/rooms/${roomId}`);
   };
 
   return (
@@ -72,7 +77,7 @@ export default function RoomsPage() {
           <p className="text-gray-500">加载中...</p>
         </div>
       ) : (
-        <RoomList rooms={rooms} onDelete={handleDelete} />
+        <RoomList rooms={rooms} onDelete={handleDelete} onRoomClick={handleRoomClick} />
       )}
     </div>
   );

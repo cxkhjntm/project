@@ -3,6 +3,7 @@ import type { Room } from '@/types';
 interface RoomListProps {
   rooms: Room[];
   onDelete: (roomId: string) => void;
+  onRoomClick?: (roomId: string) => void;
 }
 
 const statusLabels: Record<string, { label: string; color: string }> = {
@@ -18,7 +19,7 @@ const modeLabels: Record<string, string> = {
   code: '代码',
 };
 
-export default function RoomList({ rooms, onDelete }: RoomListProps) {
+export default function RoomList({ rooms, onDelete, onRoomClick }: RoomListProps) {
   if (rooms.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
@@ -61,12 +62,12 @@ export default function RoomList({ rooms, onDelete }: RoomListProps) {
               </div>
 
               <div className="flex items-center space-x-2 ml-4">
-                <a
-                  href={`/rooms/${room.id}`}
+                <button
+                  onClick={() => onRoomClick?.(room.id)}
                   className="px-3 py-1.5 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-md hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   进入
-                </a>
+                </button>
                 <button
                   onClick={() => {
                     if (window.confirm(`确定要删除讨论室 "${room.name}" 吗？所有相关数据将被永久删除。`)) {
