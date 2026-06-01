@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/api/client';
-import type { RoleCard, Provider, RoomCreate, ParticipantInput, RoomMode, RoomStrategy } from '@/types';
+import type { RoleCard, Provider, RoomCreate, ParticipantInput, RoomMode } from '@/types';
 import FolderPicker from '@/components/shared/FolderPicker';
+
+const MODE_DESCRIPTIONS: Record<RoomMode, string> = {
+  code_document: '产出适合交给AI编辑器或开发人员执行的Markdown技术方案',
+  document: '产出适合阅读、汇报、归档的文档或表格',
+  code: '产出核心代码草案，用于快速判断技术方向是否可行',
+};
 
 interface RoomFormProps {
   onSubmit: (data: RoomCreate) => Promise<void>;
@@ -13,7 +19,6 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [mode, setMode] = useState<RoomMode>('code_document');
-  const [strategy, setStrategy] = useState<RoomStrategy>('standard');
   const [outputDirectory, setOutputDirectory] = useState('');
   const [roundLimit, setRoundLimit] = useState(5);
   const [selectedParticipants, setSelectedParticipants] = useState<Map<string, string>>(new Map());
@@ -21,18 +26,6 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
   const [roleCards, setRoleCards] = useState<RoleCard[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const modeDescriptions: Record<RoomMode, string> = {
-    code_document: '产出适合交给AI编辑器或开发人员执行的Markdown技术方案',
-    document: '产出适合阅读、汇报、归档的文档或表格',
-    code: '产出核心代码草案，用于快速判断技术方向是否可行',
-  };
-
-  const strategyDescriptions: Record<RoomStrategy, string> = {
-    standard: '初步观点 + 交叉质询 + 汇总，适合大部分任务',
-    debate: '多轮质询和风险检查，适合重要方案或复杂文档',
-    sequential: '每个专家发言一轮后直接总结，适合简单任务',
-  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -83,7 +76,6 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
       name,
       goal,
       mode,
-      strategy,
       output_directory: outputDirectory,
       round_limit: roundLimit,
       participants,
@@ -142,23 +134,7 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
           <option value="document">纯文档模式</option>
           <option value="code">代码模式</option>
         </select>
-        <p className="text-xs text-gray-500 mt-1">{modeDescriptions[mode]}</p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          讨论策略
-        </label>
-        <select
-          value={strategy}
-          onChange={e => setStrategy(e.target.value as RoomStrategy)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-        >
-          <option value="standard">标准模式</option>
-          <option value="debate">辩论模式</option>
-          <option value="sequential">顺序模式</option>
-        </select>
-        <p className="text-xs text-gray-500 mt-1">{strategyDescriptions[strategy]}</p>
+        <p className="text-xs text-gray-500 mt-1">{MODE_DESCRIPTIONS[mode]}</p>
       </div>
 
       <FolderPicker

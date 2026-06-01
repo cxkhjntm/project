@@ -96,7 +96,6 @@ export interface RoleCardUpdate {
 // === Room ===
 
 export type RoomMode = 'code_document' | 'document' | 'code';
-export type RoomStrategy = 'standard' | 'debate' | 'sequential';
 export type RoomStatus = 'draft' | 'active' | 'completed' | 'error';
 
 export interface ParticipantInput {
@@ -110,7 +109,7 @@ export interface Room {
   name: string;
   goal: string;
   mode: RoomMode;
-  strategy: RoomStrategy;
+  strategy: string;
   output_directory: string;
   round_limit: number;
   status: RoomStatus;
@@ -123,7 +122,6 @@ export interface RoomCreate {
   name: string;
   goal: string;
   mode?: RoomMode;
-  strategy?: RoomStrategy;
   output_directory: string;
   round_limit?: number;
   participants: ParticipantInput[];
@@ -133,7 +131,6 @@ export interface RoomUpdate {
   name?: string;
   goal?: string;
   mode?: RoomMode;
-  strategy?: RoomStrategy;
   output_directory?: string;
   round_limit?: number;
 }
