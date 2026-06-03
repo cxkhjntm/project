@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/rooms", tags=["discussion"])
 
 
-@router.post("/{room_id}/start")
+@router.get("/{room_id}/start")
 async def start_discussion(
     room_id: str,
     session: AsyncSession = Depends(get_session),
