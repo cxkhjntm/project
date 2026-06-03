@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDiscussionSSE } from '../hooks/useDiscussionSSE';
+import { useDiscussionControl } from '../hooks/useDiscussionControl';
 import { useArtifactStore } from '../stores/artifactStore';
 import { apiClient } from '../api/client';
 import {
@@ -36,7 +37,6 @@ export default function DiscussionPage() {
 
   const [roomData, setRoomData] = useState<RoomData | null>(null);
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
-  const [hasAutoStarted, setHasAutoStarted] = useState(false);
 
   const {
     messages,
@@ -51,6 +51,14 @@ export default function DiscussionPage() {
     startDiscussion,
     reset,
   } = useDiscussionSSE();
+
+  const {
+    status: controlStatus,
+    startDiscussion: controlStart,
+    pauseDiscussion,
+    resumeDiscussion,
+    stopDiscussion,
+  } = useDiscussionControl(roomId || '');
 
   const { synthesize, isLoading: isSynthesizing } = useArtifactStore();
   const [synthesizeError, setSynthesizeError] = useState<string | null>(null);
@@ -82,19 +90,44 @@ export default function DiscussionPage() {
   }, [roomId, reset]);
 
   useEffect(() => {
-    if (!roomData || !roomId || hasAutoStarted) return;
-
-    const roomStatus = roomData.status;
-
-    if (roomStatus === 'idle' || roomStatus === 'draft' || roomStatus === 'running') {
-      setHasAutoStarted(true);
-      startDiscussion(roomId);
-    }
-  }, [roomData, roomId, hasAutoStarted, startDiscussion]);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleStartDiscussion = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      await controlStart();
+      startDiscussion(roomId);
+    } catch (err) {
+      console.error('Failed to start discussion:', err);
+    }
+  }, [roomId, controlStart, startDiscussion]);
+
+  const handlePauseDiscussion = useCallback(async () => {
+    try {
+      await pauseDiscussion();
+    } catch (err) {
+      console.error('Failed to pause discussion:', err);
+    }
+  }, [pauseDiscussion]);
+
+  const handleResumeDiscussion = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      await resumeDiscussion();
+      startDiscussion(roomId);
+    } catch (err) {
+      console.error('Failed to resume discussion:', err);
+    }
+  }, [roomId, resumeDiscussion, startDiscussion]);
+
+  const handleStopDiscussion = useCallback(async () => {
+    try {
+      await stopDiscussion();
+    } catch (err) {
+      console.error('Failed to stop discussion:', err);
+    }
+  }, [stopDiscussion]);
 
   const handleSynthesize = useCallback(async () => {
     if (!roomId) return;
@@ -107,13 +140,6 @@ export default function DiscussionPage() {
       setSynthesizeError(message);
     }
   }, [roomId, synthesize, navigate]);
-
-  const handleRestart = useCallback(() => {
-    if (roomId) {
-      setHasAutoStarted(true);
-      startDiscussion(roomId);
-    }
-  }, [roomId, startDiscussion]);
 
   const handleSendUserMessage = useCallback(
     async (content: string) => {
@@ -164,10 +190,15 @@ export default function DiscussionPage() {
 
   const isDiscussionActive = status === 'running' || status === 'connecting';
   const canSendMessages = isDiscussionActive && !isComplete;
+  const currentRoomStatus = controlStatus?.status || roomData?.status || 'draft';
+  const showStartButton = currentRoomStatus === 'draft' || currentRoomStatus === 'idle' || currentRoomStatus === 'completed';
+  const showPauseButton = currentRoomStatus === 'running' && controlStatus?.can_pause;
+  const showResumeButton = currentRoomStatus === 'paused' && controlStatus?.can_resume;
+  const showStopButton = (currentRoomStatus === 'running' || currentRoomStatus === 'paused') && controlStatus?.can_stop;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header - with back button */}
+      {/* Header - with back button and control buttons */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -207,6 +238,44 @@ export default function DiscussionPage() {
                status === 'failed' ? '❌ 失败' :
                status === 'idle' ? '⚪ 待开始' : '⏳ 连接中'}
             </span>
+
+            {/* Control buttons */}
+            {showStartButton && (
+              <button
+                onClick={handleStartDiscussion}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                ▶ 开始讨论
+              </button>
+            )}
+
+            {showPauseButton && (
+              <button
+                onClick={handlePauseDiscussion}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                ⏸ 暂停
+              </button>
+            )}
+
+            {showResumeButton && (
+              <button
+                onClick={handleResumeDiscussion}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                ▶ 继续
+              </button>
+            )}
+
+            {showStopButton && (
+              <button
+                onClick={handleStopDiscussion}
+                className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                ⏹ 停止
+              </button>
+            )}
+
             {isComplete && (
               <>
                 <button
@@ -252,15 +321,9 @@ export default function DiscussionPage() {
           {/* Messages (scrollable) */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {/* Idle state: waiting to start */}
-            {status === 'idle' && messages.length === 0 && !hasAutoStarted && (
+            {(status === 'idle' || currentRoomStatus === 'draft') && messages.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-4">点击开始按钮启动讨论</p>
-                <button
-                  onClick={handleRestart}
-                  className="px-6 py-3 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  开始讨论
-                </button>
+                <p className="text-gray-500 mb-4">点击上方"开始讨论"按钮启动讨论</p>
               </div>
             )}
 
@@ -275,12 +338,6 @@ export default function DiscussionPage() {
                 <p className="text-gray-500 mb-4">
                   {status === 'completed' ? '讨论已完成' : '讨论失败'}
                 </p>
-                <button
-                  onClick={handleRestart}
-                  className="px-6 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  重新开始
-                </button>
               </div>
             )}
 
@@ -306,7 +363,7 @@ export default function DiscussionPage() {
                   <span>{error}</span>
                 </div>
                 <button
-                  onClick={handleRestart}
+                  onClick={handleStartDiscussion}
                   className="text-xs text-red-600 hover:text-red-800 underline"
                 >
                   重试

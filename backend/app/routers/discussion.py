@@ -55,7 +55,7 @@ async def start_discussion(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     
-    if room.status not in ("draft", "completed"):
+    if room.status not in ("idle", "draft", "completed"):
         raise HTTPException(
             status_code=400,
             detail=f"Room is in '{room.status}' state, cannot start discussion"
