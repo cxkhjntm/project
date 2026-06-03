@@ -1,9 +1,9 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Provider, ProviderCreate } from '@/types';
+import type { Provider, ProviderCreate, ProviderUpdate } from '@/types';
 
-const providerSchema = z.object({
+const createProviderSchema = z.object({
   name: z.string().min(1, '请输入 Provider 名称').max(100, '名称不能超过 100 个字符'),
   base_url: z.string().url('请输入有效的 URL').min(1, '请输入 API Base URL'),
   api_key: z.string().min(1, '请输入 API Key').max(500),
@@ -13,11 +13,21 @@ const providerSchema = z.object({
   default_max_output_tokens: z.number().min(1, '输出 Token 不能小于 1').max(1000000, '输出 Token 不能超过 1000000'),
 });
 
-type ProviderFormData = z.infer<typeof providerSchema>;
+const updateProviderSchema = z.object({
+  name: z.string().min(1, '请输入 Provider 名称').max(100, '名称不能超过 100 个字符'),
+  base_url: z.string().url('请输入有效的 URL').min(1, '请输入 API Base URL'),
+  api_key: z.string().max(500).optional().or(z.literal('')),
+  default_model: z.string().min(1, '请输入默认模型名称').max(100),
+  default_temperature: z.number().min(0, '温度不能小于 0').max(2, '温度不能大于 2'),
+  default_max_input_tokens: z.number().min(1, '输入 Token 不能小于 1').max(1000000, '输入 Token 不能超过 1000000'),
+  default_max_output_tokens: z.number().min(1, '输出 Token 不能小于 1').max(1000000, '输出 Token 不能超过 1000000'),
+});
+
+type ProviderFormData = z.infer<typeof createProviderSchema>;
 
 interface ProviderFormProps {
   provider?: Provider;
-  onSubmit: (data: ProviderCreate) => Promise<void>;
+  onSubmit: (data: ProviderCreate | ProviderUpdate) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
@@ -28,12 +38,14 @@ export default function ProviderForm({
   onCancel,
   isSubmitting = false,
 }: ProviderFormProps) {
+  const isEditing = !!provider;
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<ProviderFormData>({
-    resolver: zodResolver(providerSchema),
+    resolver: zodResolver(isEditing ? updateProviderSchema : createProviderSchema),
     defaultValues: provider
       ? {
           name: provider.name,
@@ -56,10 +68,23 @@ export default function ProviderForm({
   });
 
   const handleFormSubmit = async (data: ProviderFormData) => {
-    await onSubmit(data);
+    if (isEditing) {
+      const updateData: ProviderUpdate = {
+        name: data.name,
+        base_url: data.base_url,
+        default_model: data.default_model,
+        default_temperature: data.default_temperature,
+        default_max_input_tokens: data.default_max_input_tokens,
+        default_max_output_tokens: data.default_max_output_tokens,
+      };
+      if (data.api_key && data.api_key.trim() !== '') {
+        updateData.api_key = data.api_key;
+      }
+      await onSubmit(updateData);
+    } else {
+      await onSubmit(data as ProviderCreate);
+    }
   };
-
-  const isEditing = !!provider;
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
@@ -97,7 +122,7 @@ export default function ProviderForm({
 
       <div>
         <label htmlFor="api_key" className="block text-sm font-medium text-gray-700 mb-1">
-          API Key <span className="text-red-500">*</span>
+          API Key {!isEditing && <span className="text-red-500">*</span>}
         </label>
         <input
           id="api_key"

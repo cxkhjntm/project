@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/api/client';
-import type { Provider, ProviderCreate } from '@/types';
+import type { Provider, ProviderCreate, ProviderUpdate } from '@/types';
 import ProviderList from '@/components/provider/ProviderList';
 import ProviderForm from '@/components/provider/ProviderForm';
 
@@ -29,10 +29,10 @@ export default function SettingsPage() {
     fetchProviders();
   }, [fetchProviders]);
 
-  const handleCreate = async (data: ProviderCreate) => {
+  const handleCreate = async (data: ProviderCreate | ProviderUpdate) => {
     try {
       setIsSubmitting(true);
-      await apiClient.createProvider(data);
+      await apiClient.createProvider(data as ProviderCreate);
       setShowForm(false);
       await fetchProviders();
     } catch (err) {
@@ -42,7 +42,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdate = async (data: ProviderCreate) => {
+  const handleUpdate = async (data: ProviderCreate | ProviderUpdate) => {
     if (!editingProvider) return;
 
     try {

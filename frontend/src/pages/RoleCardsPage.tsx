@@ -135,16 +135,32 @@ export default function RoleCardsPage() {
       )}
 
       {showForm && (
-        <div className="mb-6 bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">
-            {editingRoleCard ? '编辑角色卡' : '添加角色卡'}
-          </h2>
-          <RoleCardForm
-            roleCard={editingRoleCard ?? undefined}
-            onSubmit={editingRoleCard ? handleUpdate : handleCreate}
-            onCancel={handleCancel}
-            isSubmitting={isSubmitting}
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black bg-opacity-50"
+            onClick={handleCancel}
           />
+          <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+              <h2 className="text-lg font-medium text-gray-900">
+                {editingRoleCard ? '编辑角色卡' : '添加角色卡'}
+              </h2>
+              <button
+                onClick={handleCancel}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <RoleCardForm
+                roleCard={editingRoleCard ?? undefined}
+                onSubmit={editingRoleCard ? handleUpdate : handleCreate}
+                onCancel={handleCancel}
+                isSubmitting={isSubmitting}
+              />
+            </div>
+          </div>
         </div>
       )}
 
