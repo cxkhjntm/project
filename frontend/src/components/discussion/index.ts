@@ -4,3 +4,4 @@ export { RoundProgress } from './RoundProgress';
 export { RoundDivider } from './RoundDivider';
 export { CitationBlock } from './CitationBlock';
 export { ParticipantSidebar } from './ParticipantSidebar';
+export { UserInputBar } from './UserInputBar';

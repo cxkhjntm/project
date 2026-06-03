@@ -66,7 +66,7 @@ export default function RoomList({ rooms, onDelete, onRoomClick }: RoomListProps
                   onClick={() => onRoomClick?.(room.id)}
                   className="px-3 py-1.5 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-md hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
-                  进入
+                  进入讨论
                 </button>
                 <button
                   onClick={() => {

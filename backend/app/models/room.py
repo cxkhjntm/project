@@ -63,6 +63,10 @@ class RoomParticipant(Base):
     )
     model_override: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
+    # Transient fields populated by service layer for response serialization
+    role_card_name: str = ""
+    role_card_expertise: List[str] = []
+
     # Relationships
     room: Mapped["Room"] = relationship(back_populates="participants")
     role_card: Mapped["RoleCard"] = relationship(back_populates="room_participations")

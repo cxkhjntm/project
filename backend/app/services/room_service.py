@@ -96,21 +96,35 @@ class RoomService:
         return list(result.scalars().all())
 
     async def get_by_id(self, session: AsyncSession, room_id: str) -> Optional[Room]:
-        """Get room by ID with participants.
+        """Get room by ID with participants and role card details.
         
         Args:
             session: Database session
             room_id: Room ID
             
         Returns:
-            Room with participants or None
+            Room with participants enriched with role card data, or None
         """
         result = await session.execute(
             select(Room)
             .where(Room.id == room_id)
-            .options(selectinload(Room.participants))
+            .options(
+                selectinload(Room.participants).selectinload(RoomParticipant.role_card)
+            )
         )
-        return result.scalar_one_or_none()
+        room = result.scalar_one_or_none()
+
+        # Enrich participants with role card details for response serialization
+        if room:
+            for participant in room.participants:
+                if participant.role_card:
+                    participant.role_card_name = participant.role_card.name
+                    participant.role_card_expertise = participant.role_card.expertise or []
+                else:
+                    participant.role_card_name = ""
+                    participant.role_card_expertise = []
+
+        return room
 
     async def update(
         self, session: AsyncSession, room_id: str, data: RoomUpdate

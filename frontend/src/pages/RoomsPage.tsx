@@ -37,7 +37,7 @@ export default function RoomsPage() {
   };
 
   const handleRoomClick = (roomId: string) => {
-    navigate(`/rooms/${roomId}`);
+    navigate(`/rooms/${roomId}/discussion`);
   };
 
   return (

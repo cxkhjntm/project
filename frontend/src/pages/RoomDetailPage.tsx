@@ -6,10 +6,6 @@ export default function RoomDetailPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
 
-  if (!roomId) {
-    return <div>Room ID is required</div>;
-  }
-
   const {
     status,
     isLoading,
@@ -18,7 +14,11 @@ export default function RoomDetailPage() {
     pauseDiscussion,
     resumeDiscussion,
     stopDiscussion,
-  } = useDiscussionControl(roomId);
+  } = useDiscussionControl(roomId ?? '');
+
+  if (!roomId) {
+    return <div>Room ID is required</div>;
+  }
 
   const handleStartDiscussion = async () => {
     await startDiscussion();

@@ -37,6 +37,8 @@ class ParticipantResponse(BaseModel):
     """Schema for participant response."""
     room_id: str
     role_card_id: str
+    role_card_name: str = ""
+    role_card_expertise: List[str] = []
     provider_id: str
     model_override: Optional[str] = None
 
