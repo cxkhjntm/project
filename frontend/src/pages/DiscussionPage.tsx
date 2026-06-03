@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDiscussionSSE } from '../hooks/useDiscussionSSE';
 import { useDiscussionControl } from '../hooks/useDiscussionControl';
 import { useArtifactStore } from '../stores/artifactStore';
 import { apiClient } from '../api/client';
+import * as artifactsApi from '../api/artifacts';
 import {
   MessageBubble,
   ThinkingIndicator,
@@ -12,7 +13,7 @@ import {
   ParticipantSidebar,
   UserInputBar,
 } from '../components/discussion';
-import type { RoomParticipant } from '../types';
+import type { RoomParticipant, Artifact } from '../types';
 
 interface RoomData {
   id: string;
@@ -50,11 +51,11 @@ export default function DiscussionPage() {
     startTimestamp,
     startDiscussion,
     reset,
+    artifact,
   } = useDiscussionSSE();
 
   const {
     status: controlStatus,
-    startDiscussion: controlStart,
     pauseDiscussion,
     resumeDiscussion,
     stopDiscussion,
@@ -62,6 +63,8 @@ export default function DiscussionPage() {
 
   const { synthesize, isLoading: isSynthesizing } = useArtifactStore();
   const [synthesizeError, setSynthesizeError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyArtifacts, setHistoryArtifacts] = useState<Artifact[]>([]);
 
   const currentSpeaker = React.useMemo(() => {
     const thinkingRoles = Object.entries(thinking)
@@ -69,6 +72,17 @@ export default function DiscussionPage() {
       .map(([role]) => role);
     return thinkingRoles.length > 0 ? thinkingRoles[0] : null;
   }, [thinking]);
+
+  // 构建 role_card_id -> 名字 的映射（必须在所有 early return 之前）
+  const participantNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (roomData?.participants) {
+      for (const p of roomData.participants) {
+        map[p.role_card_id] = p.role_card_name;
+      }
+    }
+    return map;
+  }, [roomData?.participants]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -86,6 +100,16 @@ export default function DiscussionPage() {
         setIsLoadingRoom(false);
       });
 
+    // 加载历史产出物
+    artifactsApi
+      .getByRoom(roomId)
+      .then((artifacts) => {
+        setHistoryArtifacts(artifacts);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch artifacts:', err);
+      });
+
     return () => reset();
   }, [roomId, reset]);
 
@@ -96,12 +120,12 @@ export default function DiscussionPage() {
   const handleStartDiscussion = useCallback(async () => {
     if (!roomId) return;
     try {
-      await controlStart();
+      // SSE /start 端点自行管理状态转换，不需要先调用 /control
       startDiscussion(roomId);
     } catch (err) {
       console.error('Failed to start discussion:', err);
     }
-  }, [roomId, controlStart, startDiscussion]);
+  }, [roomId, startDiscussion]);
 
   const handlePauseDiscussion = useCallback(async () => {
     try {
@@ -114,6 +138,7 @@ export default function DiscussionPage() {
   const handleResumeDiscussion = useCallback(async () => {
     if (!roomId) return;
     try {
+      // 先恢复状态，然后重新连接 SSE
       await resumeDiscussion();
       startDiscussion(roomId);
     } catch (err) {
@@ -172,12 +197,17 @@ export default function DiscussionPage() {
     .filter(([, isThinking]) => isThinking)
     .map(([role]) => role);
 
+  // 修复 RoundDivider 逻辑：
+  // lastRound 初始化为 0（与 round 从 1 开始一致）
+  // 无论是否渲染分隔线，都要更新 lastRound，避免状态不同步
   const messageElements: React.ReactNode[] = [];
-  let lastRound = -1;
+  let lastRound = 0;
 
   messages.forEach((msg, index) => {
-    if (msg.round !== lastRound && msg.round > 1) {
-      messageElements.push(<RoundDivider key={`round-${msg.round}`} round={msg.round} />);
+    if (msg.round !== lastRound) {
+      if (msg.round > 1) {
+        messageElements.push(<RoundDivider key={`round-${msg.round}`} round={msg.round} />);
+      }
       lastRound = msg.round;
     }
 
@@ -185,7 +215,14 @@ export default function DiscussionPage() {
       .slice(0, index)
       .some((m) => m.round === msg.round && m.sender_id === msg.sender_id && m.sender_type === msg.sender_type);
 
-    messageElements.push(<MessageBubble key={msg.id} message={msg} showExpertiseBadge={isFirstInRound} />);
+    messageElements.push(
+      <MessageBubble
+        key={msg.id}
+        message={msg}
+        showExpertiseBadge={isFirstInRound}
+        participantNameMap={participantNameMap}
+      />
+    );
   });
 
   const isDiscussionActive = status === 'running' || status === 'connecting';
@@ -276,23 +313,39 @@ export default function DiscussionPage() {
               </button>
             )}
 
-            {isComplete && (
+            {isComplete && !artifact && (
               <>
                 <button
                   onClick={handleSynthesize}
                   disabled={isSynthesizing}
                   className="px-3 py-1.5 text-xs font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSynthesizing ? '合成中...' : '生成产出'}
-                </button>
-                <button
-                  onClick={() => navigate(`/rooms/${roomId}/artifacts`)}
-                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                >
-                  查看产出
+                  {isSynthesizing ? '合成中...' : '手动生成产出'}
                 </button>
               </>
             )}
+
+            {(isComplete || artifact) && (
+              <button
+                onClick={() => navigate(`/rooms/${roomId}/artifacts`)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                查看产出
+              </button>
+            )}
+
+            {/* 历史记录按钮 */}
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors ${
+                showHistory
+                  ? 'text-primary-700 bg-primary-50 border-primary-300'
+                  : 'text-gray-600 bg-white border-gray-300 hover:bg-gray-50'
+              }`}
+              title="查看历史产出物"
+            >
+              📚 历史{historyArtifacts.length > 0 && ` (${historyArtifacts.length})`}
+            </button>
           </div>
         </div>
       </div>
@@ -381,14 +434,62 @@ export default function DiscussionPage() {
             </div>
           )}
 
-          {/* Completion bar */}
-          {isComplete && (
+          {/* Auto-generated artifact card */}
+          {artifact && (
+            <div className="bg-emerald-50 border-t border-emerald-200 px-6 py-4 shrink-0">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-lg shrink-0 mt-0.5">
+                    📄
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-emerald-800">
+                      ✅ 产出物已自动生成
+                    </p>
+                    <p className="text-xs text-emerald-600 mt-0.5">
+                      {artifact.title} · {artifact.artifact_type}
+                    </p>
+                    {artifact.file_path && (
+                      <p className="text-xs text-emerald-500 mt-1 font-mono truncate" title={artifact.file_path}>
+                        📂 {artifact.file_path}
+                      </p>
+                    )}
+                    {artifact.summary && (
+                      <p className="text-xs text-emerald-500 mt-0.5 line-clamp-2">
+                        {artifact.summary}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleStartDiscussion}
+                    className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-white border border-emerald-300 rounded-md hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors"
+                  >
+                    🔄 重新讨论
+                  </button>
+                  <button
+                    onClick={() => navigate(`/rooms/${roomId}/artifacts`)}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors"
+                  >
+                    查看产出物 →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Completion bar (only show when no artifact yet) */}
+          {isComplete && !artifact && (
             <div className="bg-green-50 border-t border-green-200 px-6 py-3 shrink-0">
-              <div className="flex items-center gap-2 text-green-700 text-sm">
-                <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span>讨论已完成！共 {messages.length} 条消息，{totalTokens.toLocaleString()} tokens</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-green-700 text-sm">
+                  <svg className="w-4 h-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>讨论已完成！共 {messages.length} 条消息，{totalTokens.toLocaleString()} tokens。正在自动生成产出物...</span>
+                </div>
               </div>
             </div>
           )}
@@ -405,6 +506,95 @@ export default function DiscussionPage() {
           />
         </div>
       </div>
+
+      {/* 历史产出物右侧抽屉 */}
+      {showHistory && (
+        <>
+          {/* 遥罩层 */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-20 z-40"
+            onClick={() => setShowHistory(false)}
+          />
+          {/* 抽屉面板 */}
+          <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">📚 历史产出物</h3>
+                <p className="text-xs text-gray-500 mt-0.5">本讨论室的所有产出记录</p>
+              </div>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {historyArtifacts.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-gray-300 text-4xl mb-3">📄</div>
+                  <p className="text-sm text-gray-500">暂无历史产出物</p>
+                  <p className="text-xs text-gray-400 mt-1">讨论完成后会自动生成</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {historyArtifacts.map((a, index) => (
+                    <div
+                      key={a.id}
+                      className="bg-gray-50 rounded-lg border border-gray-200 p-4 hover:border-primary-300 hover:bg-primary-50/30 transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-md bg-primary-100 flex items-center justify-center text-primary-600 text-sm shrink-0 mt-0.5">
+                          #{index + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-800 truncate">
+                            {a.title || `产出物 ${index + 1}`}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {a.artifact_type || '未知类型'}
+                            {a.created_at && ` · ${new Date(a.created_at).toLocaleString('zh-CN')}`}
+                          </p>
+                          {a.file_path && (
+                            <div className="mt-2 bg-white rounded border border-gray-200 px-3 py-2">
+                              <p className="text-xs text-gray-400 mb-0.5">📂 输出路径</p>
+                              <p
+                                className="text-xs text-gray-700 font-mono break-all select-all cursor-text"
+                                title={a.file_path}
+                              >
+                                {a.file_path}
+                              </p>
+                            </div>
+                          )}
+                          {a.summary && (
+                            <p className="text-xs text-gray-500 mt-2 line-clamp-3">
+                              {a.summary}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {historyArtifacts.length > 0 && (
+              <div className="px-4 py-3 border-t border-gray-200 shrink-0">
+                <button
+                  onClick={() => navigate(`/rooms/${roomId}/artifacts`)}
+                  className="w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+                >
+                  查看全部产出物 →
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

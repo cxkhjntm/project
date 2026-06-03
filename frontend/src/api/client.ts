@@ -226,6 +226,22 @@ class ApiClient {
     const query = path ? `?path=${encodeURIComponent(path)}` : '';
     return this.request(`/filesystem/browse${query}`);
   }
+
+  async getShortcuts(): Promise<
+    Array<{ name: string; path: string; icon: string }>
+  > {
+    return this.request('/filesystem/shortcuts');
+  }
+
+  async createDirectory(
+    path: string,
+    name: string
+  ): Promise<{ path: string; success: boolean }> {
+    return this.request('/filesystem/mkdir', {
+      method: 'POST',
+      body: { path, name },
+    });
+  }
 }
 
 // Custom error class

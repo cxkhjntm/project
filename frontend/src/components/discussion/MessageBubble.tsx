@@ -5,6 +5,8 @@ import { CitationBlock } from './CitationBlock';
 interface MessageBubbleProps {
   message: DiscussionMessage;
   showExpertiseBadge?: boolean;
+  /** Map from role_card_id to display name, used to resolve expert names */
+  participantNameMap?: Record<string, string>;
 }
 
 const EXPERT_COLORS: Record<string, string> = {
@@ -15,12 +17,21 @@ const EXPERT_COLORS: Record<string, string> = {
   '文档专家': 'var(--expert-doc, #6366F1)',
 };
 
+// 自动分配颜色的调色板（用于自定义角色卡）
+const AUTO_COLORS = [
+  '#F59E0B', '#EC4899', '#14B8A6', '#6366F1', '#EF4444',
+  '#8B5CF6', '#06B6D4', '#84CC16', '#F97316', '#A855F7',
+];
+
 const EXPERT_EMOJIS: Record<string, string> = {
   '产品经理': '👨‍💼',
   '系统架构师': '🧑‍💻',
   '后端工程专家': '⚙️',
   '文档专家': '📝',
   '主持人': '🎯',
+  '测试专家': '🧪',
+  '安全专家': '🔒',
+  '前端专家': '🎨',
 };
 
 const senderLabels: Record<string, string> = {
@@ -30,20 +41,52 @@ const senderLabels: Record<string, string> = {
   system: '系统',
 };
 
-function getExpertColor(senderId: string | null): string {
-  if (!senderId) return 'var(--expert-host, #6B7280)';
-  return EXPERT_COLORS[senderId] || 'var(--expert-host, #6B7280)';
+function getExpertColor(name: string): string {
+  if (EXPERT_COLORS[name]) return EXPERT_COLORS[name];
+  // 对自定义角色卡按名字生成稳定的颜色
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return AUTO_COLORS[Math.abs(hash) % AUTO_COLORS.length];
+}
+
+function getEmoji(name: string): string {
+  return EXPERT_EMOJIS[name] || '🤖';
+}
+
+/** 判断 sender_id 是否为 UUID 格式 */
+function isUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   showExpertiseBadge = false,
+  participantNameMap = {},
 }) => {
   const isOrchestrator = message.sender_type === 'orchestrator';
   const isSystem = message.sender_type === 'system';
   const isUser = message.sender_type === 'user';
-  const expertColor = getExpertColor(message.sender_id);
-  const emoji = EXPERT_EMOJIS[message.sender_id || ''] || '🤖';
+
+  // 解析显示名称：优先使用 participantNameMap 将 UUID 映射为名字
+  const resolvedName = React.useMemo(() => {
+    if (!message.sender_id) return senderLabels[message.sender_type] || '未知';
+    // 如果有映射表，用映射表
+    if (participantNameMap[message.sender_id]) {
+      return participantNameMap[message.sender_id];
+    }
+    // 如果 sender_id 是 UUID 格式，显示为"专家"而不是原始 UUID
+    if (isUUID(message.sender_id)) {
+      return senderLabels[message.sender_type] || '专家';
+    }
+    // 否则 sender_id 本身就是名字
+    return message.sender_id;
+  }, [message.sender_id, message.sender_type, participantNameMap]);
+
+  const expertColor = getExpertColor(resolvedName);
+  const emoji = getEmoji(resolvedName);
 
   if (isOrchestrator) {
     return (
@@ -87,7 +130,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           <div className="flex items-center gap-2 mb-2">
             <span className="text-base">{emoji}</span>
             <span className="text-sm font-medium text-gray-700">
-              {message.sender_id || senderLabels[message.sender_type] || '未知'}
+              {resolvedName}
             </span>
             {showExpertiseBadge && (
               <span

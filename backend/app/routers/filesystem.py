@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -20,6 +20,22 @@ class DirectoryListing(BaseModel):
     current_path: str
     parent_path: str | None
     entries: List[DirectoryEntry]
+
+
+class ShortcutEntry(BaseModel):
+    name: str
+    path: str
+    icon: str
+
+
+class MkdirRequest(BaseModel):
+    path: str
+    name: str
+
+
+class MkdirResponse(BaseModel):
+    path: str
+    success: bool
 
 
 EXCLUDED_DIRS = {
@@ -70,3 +86,60 @@ async def browse_directory(
         parent_path=parent,
         entries=entries,
     )
+
+
+@router.get("/shortcuts", response_model=List[ShortcutEntry])
+async def get_shortcuts() -> List[ShortcutEntry]:
+    """返回常用文件夹快捷入口（桌面、文档、下载等）。"""
+    home = Path.home()
+    candidates = [
+        ("桌面", home / "Desktop", "🖥️"),
+        ("文档", home / "Documents", "📄"),
+        ("下载", home / "Downloads", "📥"),
+        ("主目录", home, "🏠"),
+    ]
+
+    # Windows 特有路径
+    if os.name == "nt":
+        for drive_letter in ["C", "D", "E", "F"]:
+            drive = Path(f"{drive_letter}:\\")
+            if drive.exists():
+                candidates.append((f"{drive_letter}: 盘", drive, "💾"))
+
+    shortcuts: List[ShortcutEntry] = []
+    for name, path, icon in candidates:
+        if path.exists() and path.is_dir():
+            shortcuts.append(ShortcutEntry(name=name, path=str(path), icon=icon))
+
+    return shortcuts
+
+
+@router.post("/mkdir", response_model=MkdirResponse)
+async def create_directory(request: MkdirRequest) -> MkdirResponse:
+    """在指定路径下创建新文件夹。"""
+    parent = Path(request.path).expanduser().resolve()
+
+    if not parent.exists():
+        raise HTTPException(status_code=404, detail=f"父目录不存在: {request.path}")
+    if not parent.is_dir():
+        raise HTTPException(status_code=400, detail=f"不是目录: {request.path}")
+
+    # 安全检查：文件夹名称
+    name = request.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="文件夹名称不能为空")
+    if any(c in name for c in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']):
+        raise HTTPException(status_code=400, detail="文件夹名称包含非法字符")
+
+    target = parent / name
+    if target.exists():
+        raise HTTPException(status_code=409, detail=f"文件夹已存在: {name}")
+
+    try:
+        target.mkdir(parents=False, exist_ok=False)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"权限不足，无法创建: {name}")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"创建文件夹失败: {e}")
+
+    return MkdirResponse(path=str(target), success=True)

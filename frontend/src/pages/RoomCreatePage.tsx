@@ -14,7 +14,7 @@ export default function RoomCreatePage() {
       setIsSubmitting(true);
       setError(null);
       const room = await apiClient.createRoom(data) as { id: string };
-      navigate(`/rooms/${room.id}`);
+      navigate(`/rooms/${room.id}/discussion`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建讨论室失败');
     } finally {

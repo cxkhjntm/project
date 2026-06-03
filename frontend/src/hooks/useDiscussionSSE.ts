@@ -8,7 +8,17 @@ import type {
   UseDiscussionSSEReturn,
 } from '../types/discussion';
 
-export function useDiscussionSSE(): UseDiscussionSSEReturn {
+interface ArtifactInfo {
+  id: string;
+  title: string;
+  file_path: string;
+  artifact_type: string;
+  summary: string | null;
+}
+
+export function useDiscussionSSE(): UseDiscussionSSEReturn & {
+  artifact: ArtifactInfo | null;
+} {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [thinking, setThinking] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +28,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
   const [totalRounds, setTotalRounds] = useState(0);
   const [totalTokens, setTotalTokens] = useState(0);
   const [startTimestamp, setStartTimestamp] = useState<number | null>(null);
+  const [artifact, setArtifact] = useState<ArtifactInfo | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,9 +90,32 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
         try {
           const data: DiscussionMessage = JSON.parse(event.data);
           setMessages((prev) => [...prev, data]);
-          if (data.sender_id) {
-            setThinking((prev) => ({ ...prev, [data.sender_id!]: false }));
+
+          // 清除 thinking 状态：
+          // orchestrator 消息的 sender_id 为 null，但 thinking 是用 role 名("主持人")设置的
+          // expert 消息的 sender_id 是 role_card_id，但 thinking 也是用 role 名设置的
+          // 所以收到消息后，我们根据 sender_type 清除对应的 thinking
+          if (data.sender_type === 'orchestrator') {
+            // 清除主持人的 thinking 状态
+            setThinking((prev) => {
+              const next = { ...prev };
+              delete next['主持人'];
+              return next;
+            });
+          } else if (data.sender_id) {
+            // 对于专家消息，用 sender_id 清除
+            // 但 thinking 是用 role name 设置的，这里无法直接匹配
+            // 所以我们清除所有 true 状态的 thinking（当前只有一个专家在 thinking）
+            setThinking((prev) => {
+              const next = { ...prev };
+              // 把所有 thinking 状态设为 false
+              Object.keys(next).forEach((key) => {
+                if (next[key]) next[key] = false;
+              });
+              return next;
+            });
           }
+
           if (data.round) setCurrentRound(data.round);
         } catch (e) {
           console.error('Failed to parse message event:', e);
@@ -94,6 +128,17 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
           setTotalTokens(data.total_tokens || 0);
         } catch (e) {
           console.error('Failed to parse cost_update event:', e);
+        }
+      });
+
+      eventSource.addEventListener('artifact', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.artifact) {
+            setArtifact(data.artifact as ArtifactInfo);
+          }
+        } catch (e) {
+          console.error('Failed to parse artifact event:', e);
         }
       });
 
@@ -114,6 +159,8 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
           JSON.parse(event.data);
           setIsComplete(true);
           setStatus('completed');
+          // 清除所有 thinking 状态
+          setThinking({});
           closeConnection();
         } catch (e) {
           console.error('Failed to parse done event:', e);
@@ -146,6 +193,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
       setTotalRounds(0);
       setTotalTokens(0);
       setStartTimestamp(null);
+      setArtifact(null);
       reconnectAttemptsRef.current = 0;
       connect(roomId);
     },
@@ -163,6 +211,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
     setTotalRounds(0);
     setTotalTokens(0);
     setStartTimestamp(null);
+    setArtifact(null);
     reconnectAttemptsRef.current = 0;
   }, [closeConnection]);
 
@@ -178,5 +227,6 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn {
     startTimestamp,
     startDiscussion,
     reset,
+    artifact,
   };
 }

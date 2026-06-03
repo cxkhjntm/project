@@ -149,14 +149,27 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
         <label className="block text-sm font-medium text-gray-700 mb-1">
           最大轮次: {roundLimit}
         </label>
-        <input
-          type="range"
-          min={1}
-          max={10}
-          value={roundLimit}
-          onChange={e => setRoundLimit(Number(e.target.value))}
-          className="w-full"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={1}
+            max={50}
+            value={roundLimit}
+            onChange={e => setRoundLimit(Number(e.target.value))}
+            className="flex-1"
+          />
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={roundLimit}
+            onChange={e => {
+              const v = Number(e.target.value);
+              if (v >= 1 && v <= 50) setRoundLimit(v);
+            }}
+            className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+        </div>
       </div>
 
       <div>
@@ -187,8 +200,8 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
                 <input
                   type="checkbox"
                   checked={selectedParticipants.has(rc.id)}
-                  onChange={() => toggleParticipant(rc.id)}
-                  className="h-4 w-4 text-primary-600"
+                  readOnly
+                  className="h-4 w-4 text-primary-600 pointer-events-none"
                 />
               </div>
               {selectedParticipants.has(rc.id) && providers.length > 0 && (

@@ -2,44 +2,13 @@
 
 import re
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-CONVERGENCE_KEYWORDS = ["可行", "同意", "没有异议", "建议直接", "没问题", "LGTM", "一致", "共识"]
-
-
-def parse_host_action(content: str) -> Optional[Tuple[str, Optional[str]]]:
-    match = re.search(r'ACTION:\s*(next:(\w+)|converge|synthesize)', content, re.IGNORECASE)
-    if not match:
-        return None
-    action_str = match.group(1).lower()
-    if action_str == "converge":
-        return ("converge", None)
-    if action_str == "synthesize":
-        return ("synthesize", None)
-    if action_str.startswith("next:"):
-        return ("next", match.group(2))
-    return None
-
-
-def parse_length_warning(content: str) -> bool:
-    return bool(re.search(r'LENGTH_WARNING:\s*true', content, re.IGNORECASE))
-
-
-def check_convergence_keywords(messages: List[Dict[str, Any]], min_ratio: float = 0.6) -> bool:
-    if not messages:
-        return False
-    last_round = max(m.get("round", 0) for m in messages)
-    last_round_experts = [m for m in messages if m.get("round") == last_round and m.get("sender_type") == "expert"]
-    if len(last_round_experts) < 2:
-        return False
-    positive = sum(1 for m in last_round_experts if any(kw in m.get("content", "") for kw in CONVERGENCE_KEYWORDS))
-    return positive >= len(last_round_experts) * min_ratio
 
 CONVERGENCE_KEYWORDS = [
     "可行", "同意", "没有异议", "建议直接", "没问题", "LGTM",
@@ -138,7 +107,6 @@ class Orchestrator:
         self.all_messages: List[Dict[str, Any]] = []
         self.decisions: List[str] = []
         self.mode = room.mode if hasattr(room, 'mode') else "code_document"
-        self.all_messages: List[Dict[str, Any]] = []
 
     def should_continue(self) -> bool:
         return self.current_round < self.max_rounds
@@ -209,10 +177,10 @@ class Orchestrator:
 
                 await self._update_rolling_summary()
 
-                if action and action[0] == "converge":
+                if action and action.get("type") == "converge":
                     break
 
-                if action and action[0] == "synthesize":
+                if action and action.get("type") == "synthesize":
                     break
 
                 if self._check_convergence():
@@ -220,11 +188,14 @@ class Orchestrator:
 
             self.state = DiscussionState.COMPLETED
 
+            # 自动生成产出物
+            artifact_info = await self._auto_generate_artifact()
+
             await self.emit_event(SSEEventType.DONE, {
                 "room_id": self.room_id,
                 "total_rounds": self.current_round,
                 "total_messages": self.total_messages,
-                "artifact_count": 0,
+                "artifact_count": 1 if artifact_info else 0,
             })
 
             return {
@@ -489,7 +460,7 @@ class Orchestrator:
             return True
         if self.current_round < 2:
             return False
-        return check_convergence_keywords(self.all_messages)
+        return check_convergence(self.all_messages)
 
     def _extract_key_point(self, content: str) -> Optional[str]:
         skip_patterns = [
@@ -507,6 +478,72 @@ class Orchestrator:
             return cleaned[:100]
         meaningful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 10]
         return max(meaningful, key=len)[:100] if meaningful else None
+
+    async def _auto_generate_artifact(self) -> Optional[Dict[str, Any]]:
+        """讨论完成后自动生成产出物。"""
+        try:
+            if not self.all_messages:
+                logger.warning("No messages to generate artifact from", room_id=self.room_id)
+                return None
+
+            output_directory = getattr(self.room, 'output_directory', None)
+            if not output_directory:
+                logger.warning("No output directory configured", room_id=self.room_id)
+                return None
+
+            from app.services.artifact_writer import ArtifactWriter, ArtifactWriterError
+
+            writer = ArtifactWriter(self.session)
+
+            participant_names = [p["name"] for p in self.participants]
+            model_name = self.participants[0]["model"] if self.participants else "unknown"
+
+            artifact = await writer.generate_artifact(
+                room_id=self.room_id,
+                room_name=self.room.name if hasattr(self.room, 'name') else "专家讨论",
+                goal=self.goal,
+                messages=self.all_messages,
+                output_directory=output_directory,
+                mode=self.mode,
+                participants=participant_names,
+                source_count=len(self.shared_sources),
+                model_name=model_name,
+            )
+
+            await self.session.commit()
+
+            artifact_info = {
+                "id": artifact.id,
+                "title": artifact.title,
+                "file_path": artifact.file_path,
+                "artifact_type": artifact.artifact_type,
+                "summary": artifact.summary,
+            }
+
+            await self.emit_event(SSEEventType.ARTIFACT, {
+                "room_id": self.room_id,
+                "artifact": artifact_info,
+            })
+
+            logger.info(
+                "Auto-generated artifact",
+                room_id=self.room_id,
+                artifact_id=artifact.id,
+            )
+            return artifact_info
+
+        except Exception as e:
+            logger.error(
+                "Auto artifact generation failed",
+                room_id=self.room_id,
+                error=str(e),
+            )
+            await self.emit_event(SSEEventType.ERROR, {
+                "room_id": self.room_id,
+                "error": f"产出物自动生成失败: {str(e)}",
+                "recoverable": True,
+            })
+            return None
 
 
 def create_orchestrator(
