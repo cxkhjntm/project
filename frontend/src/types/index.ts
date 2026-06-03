@@ -140,6 +140,8 @@ export interface RoomUpdate {
 export interface RoomParticipant {
   room_id: string;
   role_card_id: string;
+  role_card_name: string;
+  role_card_expertise: string[];
   provider_id: string;
   model_override: string | null;
 }
