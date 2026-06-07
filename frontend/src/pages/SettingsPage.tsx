@@ -89,7 +89,7 @@ export default function SettingsPage() {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-aqua-500 to-sky-500 rounded-xl hover:from-aqua-400 hover:to-sky-400 shadow-md shadow-aqua-500/20 transition-all duration-snappy"
           >
             + 添加 Provider
           </button>
@@ -111,7 +111,7 @@ export default function SettingsPage() {
       )}
 
       {showForm && (
-        <div className="mb-6 bg-white rounded-lg border border-gray-200 p-6">
+        <div className="mb-6 glass-panel rounded-2xl shadow-glass border border-slate-200/40 p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">
             {editingProvider ? '编辑 Provider' : '添加 Provider'}
           </h2>

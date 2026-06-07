@@ -91,11 +91,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   if (isOrchestrator) {
     return (
       <div className="flex justify-center mb-4">
-        <div className="bg-purple-50 border border-purple-200 rounded-lg px-4 py-2 max-w-[80%]">
-          <div className="text-xs text-gray-500 text-center mb-1">
-            🎯 主持人 · 第 {message.round} 轮
+        <div className="bg-indigo-500/5 backdrop-blur-sm border border-indigo-200/30 rounded-2xl px-5 py-3 max-w-[80%] shadow-sm text-center">
+          <div className="text-xs text-indigo-500 font-semibold mb-1">
+            🎯 主持人 · 第 {message.round} 轮讨论
           </div>
-          <div className="text-sm text-gray-600 text-center">{message.content}</div>
+          <div className="text-sm text-slate-700 font-medium leading-relaxed">{message.content}</div>
         </div>
       </div>
     );
@@ -104,9 +104,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   if (isUser) {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[70%] bg-blue-500 text-white rounded-t-xl rounded-bl-xl rounded-br-sm px-4 py-3">
-          <div className="text-sm">{message.content}</div>
-          <div className="text-xs text-blue-100 mt-1 text-right">
+        <div className="max-w-[75%] bg-gradient-to-br from-sky-500 to-aqua-500 text-white rounded-2xl rounded-tr-sm px-4.5 py-3 shadow-md shadow-sky-500/10 border border-sky-400/20">
+          <div className="text-sm leading-relaxed">{message.content}</div>
+          <div className="text-[10px] text-sky-100 mt-1 text-right">
             {message.round ? `第 ${message.round} 轮生效` : ''}
           </div>
         </div>
@@ -124,12 +124,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div className="flex justify-start mb-4">
-      <div className="max-w-[80%] rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
-        <div className="w-[3px] float-left h-full min-h-[60px]" style={{ backgroundColor: expertColor }} />
+      <div className="max-w-[80%] rounded-2xl bg-white/70 backdrop-blur-sm shadow-glass border border-slate-200/30 overflow-hidden hover:border-aqua-300/40 transition-colors duration-snappy">
+        <div className="w-[4px] float-left h-full min-h-[60px]" style={{ backgroundColor: expertColor }} />
         <div className="px-4 py-3">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1.5">
             <span className="text-base">{emoji}</span>
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-semibold text-slate-800">
               {resolvedName}
             </span>
             {showExpertiseBadge && (
@@ -140,9 +140,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 专家
               </span>
             )}
-            <span className="text-xs text-gray-400">第 {message.round} 轮</span>
+            <span className="text-xs text-slate-400">第 {message.round} 轮</span>
           </div>
-          <div className="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
+          <div className="text-slate-700 whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
           {message.key_point && (
             <div className="mt-2 pt-2 border-t border-gray-100">
               <div className="text-xs text-gray-500">

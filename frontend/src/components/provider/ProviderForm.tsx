@@ -96,7 +96,7 @@ export default function ProviderForm({
           id="name"
           type="text"
           {...register('name')}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder="例如：OpenAI"
         />
         {errors.name && (
@@ -112,7 +112,7 @@ export default function ProviderForm({
           id="base_url"
           type="url"
           {...register('base_url')}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder="https://api.openai.com/v1"
         />
         {errors.base_url && (
@@ -128,7 +128,7 @@ export default function ProviderForm({
           id="api_key"
           type="password"
           {...register('api_key')}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder={isEditing ? '留空则不更新' : '输入 API Key'}
         />
         {errors.api_key && (
@@ -147,7 +147,7 @@ export default function ProviderForm({
           id="default_model"
           type="text"
           {...register('default_model')}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder="例如：gpt-4"
         />
         {errors.default_model && (
@@ -165,7 +165,7 @@ export default function ProviderForm({
             type="number"
             step="0.1"
             {...register('default_temperature', { valueAsNumber: true })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           />
           {errors.default_temperature && (
             <p className="mt-1 text-sm text-red-600">{errors.default_temperature.message}</p>
@@ -180,7 +180,7 @@ export default function ProviderForm({
             id="default_max_input_tokens"
             type="number"
             {...register('default_max_input_tokens', { valueAsNumber: true })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
             placeholder="例如：128000, 200000, 1000000"
           />
           {errors.default_max_input_tokens && (
@@ -197,7 +197,7 @@ export default function ProviderForm({
           id="default_max_output_tokens"
           type="number"
           {...register('default_max_output_tokens', { valueAsNumber: true })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder="例如：4096, 8192, 16384"
         />
         {errors.default_max_output_tokens && (

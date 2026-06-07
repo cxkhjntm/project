@@ -234,10 +234,14 @@ export default function DiscussionPage() {
   const showStopButton = (currentRoomStatus === 'running' || currentRoomStatus === 'paused') && controlStatus?.can_stop;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header - with back button and control buttons */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
-        <div className="flex items-center justify-between">
+    <div className="flex flex-col h-screen bg-slate-900/5 relative overflow-hidden">
+      {/* 背景动态呼吸光斑 */}
+      <div className="absolute top-12 left-12 w-96 h-96 bg-aqua-300/10 rounded-full blur-[100px] animate-float-slow pointer-events-none" />
+      <div className="absolute bottom-12 right-12 w-[450px] h-[450px] bg-purple-300/10 rounded-full blur-[120px] animate-float-reverse pointer-events-none" />
+
+      {/* Header - 半透明吸顶玻璃 */}
+      <div className="bg-white/65 backdrop-blur-md border-b border-slate-200/30 px-6 py-3.5 shrink-0 z-10 flex items-center justify-between">
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/rooms')}
@@ -351,7 +355,7 @@ export default function DiscussionPage() {
       </div>
 
       {/* Main content: sidebar + chat */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden p-4 gap-4 z-10">
         {/* Left sidebar */}
         <ParticipantSidebar
           participants={roomData?.participants || []}
@@ -360,7 +364,7 @@ export default function DiscussionPage() {
         />
 
         {/* Right: chat area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden glass-panel-darker rounded-2xl shadow-glass">
           {/* Round progress */}
           <div className="px-6 pt-3 shrink-0">
             <RoundProgress
@@ -512,12 +516,12 @@ export default function DiscussionPage() {
         <>
           {/* 遥罩层 */}
           <div
-            className="fixed inset-0 bg-black bg-opacity-20 z-40"
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-all duration-snappy z-40"
             onClick={() => setShowHistory(false)}
           />
           {/* 抽屉面板 */}
-          <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <div className="fixed right-0 top-0 h-full w-96 glass-panel-darker shadow-glass-hover border-l border-slate-200/50 z-50 flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-200/50 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-base font-semibold text-gray-900">📚 历史产出物</h3>
                 <p className="text-xs text-gray-500 mt-0.5">本讨论室的所有产出记录</p>

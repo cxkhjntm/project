@@ -37,7 +37,7 @@ export default function RoomCreatePage() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="glass-panel rounded-2xl shadow-glass border border-slate-200/40 p-6">
         <RoomForm
           onSubmit={handleCreate}
           onCancel={() => navigate('/rooms')}

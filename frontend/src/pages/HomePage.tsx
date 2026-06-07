@@ -14,21 +14,21 @@ const cards = [
     description: '配置 LLM API 提供商，管理 API 密钥和模型参数',
     path: '/settings',
     icon: '⚙️',
-    color: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
+    color: 'hover:border-sky-300 hover:shadow-glass-hover',
   },
   {
     title: '角色卡管理',
     description: '创建和管理专家角色卡，定义专业领域和行为约束',
     path: '/role-cards',
     icon: '👤',
-    color: 'bg-green-50 hover:bg-green-100 border-green-200',
+    color: 'hover:border-emerald-300 hover:shadow-glass-hover',
   },
   {
     title: '专家讨论室',
     description: '创建讨论室，邀请专家协作完成任务',
     path: '/rooms',
     icon: '💬',
-    color: 'bg-purple-50 hover:bg-purple-100 border-purple-200',
+    color: 'hover:border-purple-300 hover:shadow-glass-hover',
   },
 ];
 
@@ -94,20 +94,20 @@ export default function HomePage() {
           <Link
             key={card.path}
             to={card.path}
-            className={`block p-6 rounded-lg border transition-colors ${card.color}`}
+            className={`block p-6 rounded-2xl glass-panel shadow-glass transition-all duration-snappy ease-snappy transform hover:-translate-y-1 border border-slate-200/40 ${card.color}`}
           >
             <div className="text-3xl mb-4">{card.icon}</div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="text-xl font-semibold text-slate-800 mb-2">
               {card.title}
             </h2>
-            <p className="text-gray-600 text-sm">
+            <p className="text-slate-500 text-sm leading-relaxed">
               {card.description}
             </p>
           </Link>
         ))}
       </div>
 
-      <div className="mt-12 p-6 bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="mt-12 p-6 glass-panel rounded-2xl shadow-glass border border-slate-200/40">
         <h3 className="text-lg font-medium text-gray-900 mb-3">
           快速开始
         </h3>

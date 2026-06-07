@@ -51,8 +51,8 @@ export const UserInputBar: React.FC<UserInputBarProps> = ({
   }, []);
 
   return (
-    <div className="border-t border-gray-200 bg-white px-4 py-3">
-      <div className="flex items-end gap-3">
+    <div className="px-6 py-4 bg-transparent shrink-0">
+      <div className="flex items-end gap-3 glass-panel rounded-2xl p-2.5 shadow-glass-hover border border-slate-200/40">
         <textarea
           ref={textareaRef}
           value={content}
@@ -61,23 +61,21 @@ export const UserInputBar: React.FC<UserInputBarProps> = ({
           placeholder={placeholder}
           disabled={disabled || isSending}
           rows={1}
-          className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm
-                     focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                     disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed
-                     placeholder:text-gray-400"
+          className="flex-1 resize-none bg-transparent px-3 py-2 text-sm text-slate-800
+                     focus:outline-none placeholder:text-slate-400 no-scrollbar"
         />
         <button
           onClick={handleSend}
           disabled={!content.trim() || isSending || disabled}
-          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg
-                     hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2
-                     focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed
-                     shrink-0"
+          className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-aqua-500 to-sky-500 rounded-xl
+                     hover:from-aqua-400 hover:to-sky-400 focus:outline-none focus:ring-2 focus:ring-offset-2
+                     focus:ring-aqua-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-aqua-500/20
+                     transition-all duration-snappy shrink-0"
         >
           {isSending ? '发送中...' : '发送'}
         </button>
       </div>
-      <p className="text-xs text-gray-400 mt-1.5 px-1">
+      <p className="text-xs text-slate-400 mt-2 text-center">
         Enter 发送 · Shift+Enter 换行
       </p>
     </div>

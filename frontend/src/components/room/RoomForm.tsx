@@ -102,7 +102,7 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
           value={name}
           onChange={e => setName(e.target.value)}
           required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder="例如：登录模块设计讨论"
         />
       </div>
@@ -116,7 +116,7 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
           onChange={e => setGoal(e.target.value)}
           required
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
           placeholder="描述本次讨论要达成的目标..."
         />
       </div>
@@ -128,7 +128,7 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
         <select
           value={mode}
           onChange={e => setMode(e.target.value as RoomMode)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
         >
           <option value="code_document">代码文档模式</option>
           <option value="document">纯文档模式</option>

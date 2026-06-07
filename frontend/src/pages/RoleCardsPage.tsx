@@ -137,10 +137,10 @@ export default function RoleCardsPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black bg-opacity-50"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-all duration-snappy"
             onClick={handleCancel}
           />
-          <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+          <div className="relative glass-panel-darker rounded-2xl shadow-glass-hover max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col border border-slate-200/50">
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h2 className="text-lg font-medium text-gray-900">
                 {editingRoleCard ? '编辑角色卡' : '添加角色卡'}
@@ -182,10 +182,10 @@ export default function RoleCardsPage() {
       {copyTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black bg-opacity-50"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-all duration-snappy"
             onClick={() => setCopyTarget(null)}
           />
-          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+          <div className="relative glass-panel-darker rounded-2xl shadow-glass-hover max-w-md w-full mx-4 p-6 border border-slate-200/50">
             <h3 className="text-lg font-medium text-gray-900 mb-2">复制角色卡</h3>
             <p className="text-sm text-gray-500 mb-4">
               将复制 <span className="font-medium text-gray-700">"{copyTarget.name}"</span> 的所有配置。

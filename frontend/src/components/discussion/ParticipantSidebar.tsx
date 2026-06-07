@@ -28,10 +28,10 @@ export const ParticipantSidebar: React.FC<ParticipantSidebarProps> = ({
   status,
 }) => {
   return (
-    <div className="w-60 bg-white border-r border-gray-200 flex flex-col h-full shrink-0">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <h3 className="text-sm font-medium text-gray-700">参与专家</h3>
-        <p className="text-xs text-gray-400 mt-0.5">{participants.length} 位</p>
+    <div className="w-64 glass-panel rounded-2xl flex flex-col h-full shrink-0 shadow-glass overflow-hidden border-slate-200/40">
+      <div className="px-4 py-3 border-b border-slate-200/30">
+        <h3 className="text-sm font-semibold text-slate-800">参与专家</h3>
+        <p className="text-xs text-slate-400 mt-0.5">{participants.length} 位已加入</p>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
@@ -43,25 +43,27 @@ export const ParticipantSidebar: React.FC<ParticipantSidebarProps> = ({
             <div
               key={p.role_card_id}
               className={`
-                flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200
-                ${isSpeaking ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}
+                flex items-center gap-3 px-3 py-2.5 mx-2 my-1 rounded-xl transition-all duration-snappy ease-snappy
+                ${isSpeaking 
+                  ? 'bg-aqua-500/10 border border-aqua-300/40 shadow-sm shadow-aqua-500/5' 
+                  : 'hover:bg-slate-100/40 border border-transparent'}
               `}
             >
               <span className="text-lg">{emoji}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-800 truncate">
+                  <span className={`text-sm font-semibold truncate ${isSpeaking ? 'text-aqua-700' : 'text-slate-800'}`}>
                     {p.role_card_name}
                   </span>
                   {isSpeaking && (
                     <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-xs text-green-600">发言中</span>
+                      <span className="w-1.5 h-1.5 bg-aqua-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(20,184,166,0.6)]" />
+                      <span className="text-xs text-aqua-600">发言中</span>
                     </span>
                   )}
                 </div>
                 {p.role_card_expertise.length > 0 && (
-                  <p className="text-xs text-gray-400 truncate mt-0.5">
+                  <p className="text-xs text-slate-400 truncate mt-0.5">
                     {p.role_card_expertise.slice(0, 2).join(' · ')}
                   </p>
                 )}
@@ -72,8 +74,8 @@ export const ParticipantSidebar: React.FC<ParticipantSidebarProps> = ({
       </div>
 
       {status === 'running' && !currentSpeaker && (
-        <div className="px-4 py-2 border-t border-gray-100">
-          <p className="text-xs text-gray-400 text-center">等待发言...</p>
+        <div className="px-4 py-2 border-t border-slate-200/30">
+          <p className="text-xs text-slate-400 text-center">等待发言...</p>
         </div>
       )}
     </div>
