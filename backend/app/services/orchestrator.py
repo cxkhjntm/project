@@ -66,6 +66,7 @@ class DiscussionState(str, Enum):
 class SSEEventType(str, Enum):
     THINKING = "thinking"
     MESSAGE = "message"
+    TOKEN = "token"
     ARTIFACT = "artifact"
     ERROR = "error"
     DONE = "done"
@@ -261,9 +262,16 @@ class Orchestrator:
         )
 
         try:
-            response = await client.chat_completion(
+            full_content = ""
+            async for chunk in client.chat_completion_stream(
                 messages=[{"role": "user", "content": prompt}]
-            )
+            ):
+                full_content += chunk
+                await self.emit_event(SSEEventType.TOKEN, {
+                    "room_id": self.room_id,
+                    "role": "主持人",
+                    "content": chunk,
+                })
 
             from app.schemas.message import MessageCreate
             from app.services.message_service import message_service
@@ -272,7 +280,7 @@ class Orchestrator:
                 room_id=self.room_id,
                 sender_type="orchestrator",
                 sender_id=None,
-                content=response.content,
+                content=full_content,
                 citations=None,
                 round=self.current_round,
             )
@@ -283,7 +291,7 @@ class Orchestrator:
             self.all_messages.append({
                 "sender_type": "orchestrator",
                 "sender_id": None,
-                "content": response.content,
+                "content": full_content,
                 "round": self.current_round,
             })
 
@@ -292,12 +300,12 @@ class Orchestrator:
                 "room_id": self.room_id,
                 "sender_type": "orchestrator",
                 "sender_id": None,
-                "content": response.content,
+                "content": full_content,
                 "citations": [],
                 "round": self.current_round,
             })
 
-            return response.content
+            return full_content
 
         except ModelClientError as e:
             logger.error("Orchestrator turn failed", error=str(e), round=self.current_round)
@@ -363,9 +371,16 @@ class Orchestrator:
         )
 
         try:
-            response = await client.chat_completion(
+            full_content = ""
+            async for chunk in client.chat_completion_stream(
                 messages=[{"role": "user", "content": prompt}]
-            )
+            ):
+                full_content += chunk
+                await self.emit_event(SSEEventType.TOKEN, {
+                    "room_id": self.room_id,
+                    "role": role_name,
+                    "content": chunk,
+                })
 
             from app.schemas.message import MessageCreate
             from app.services.message_service import message_service
@@ -374,7 +389,7 @@ class Orchestrator:
                 room_id=self.room_id,
                 sender_type="expert",
                 sender_id=role_card_id,
-                content=response.content,
+                content=full_content,
                 citations=None,
                 round=self.current_round,
             )
@@ -382,12 +397,12 @@ class Orchestrator:
             message = await message_service.create(self.session, message_data)
             self.total_messages += 1
 
-            key_point = self._extract_key_point(response.content)
+            key_point = self._extract_key_point(full_content)
 
             self.all_messages.append({
                 "sender_type": "expert",
                 "sender_id": role_name,
-                "content": response.content,
+                "content": full_content,
                 "round": self.current_round,
             })
 
@@ -396,7 +411,7 @@ class Orchestrator:
                 "room_id": self.room_id,
                 "sender_type": "expert",
                 "sender_id": role_card_id,
-                "content": response.content,
+                "content": full_content,
                 "citations": [],
                 "round": self.current_round,
                 "key_point": key_point,
