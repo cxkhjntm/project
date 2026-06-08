@@ -10,6 +10,28 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_global_client: httpx.AsyncClient | None = None
+
+
+async def get_global_client() -> httpx.AsyncClient:
+    global _global_client
+    if _global_client is None:
+        _global_client = httpx.AsyncClient(
+            timeout=120.0,
+            limits=httpx.Limits(
+                max_connections=100,
+                max_keepalive_connections=20,
+            ),
+        )
+    return _global_client
+
+
+async def close_global_client() -> None:
+    global _global_client
+    if _global_client is not None:
+        await _global_client.aclose()
+        _global_client = None
+
 
 @dataclass
 class ModelResponse:
@@ -96,27 +118,27 @@ class ModelClient:
         
         for attempt in range(self.max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(
-                        f"{self.base_url}/chat/completions",
-                        headers=headers,
-                        json=payload,
+                client = await get_global_client()
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+                
+                if response.status_code != 200:
+                    error_text = response.text[:500]
+                    raise ModelClientError(
+                        f"API returned status {response.status_code}: {error_text}"
                     )
-                    
-                    if response.status_code != 200:
-                        error_text = response.text[:500]
-                        raise ModelClientError(
-                            f"API returned status {response.status_code}: {error_text}"
-                        )
-                    
-                    data = response.json()
-                    
-                    return ModelResponse(
-                        content=data["choices"][0]["message"]["content"],
-                        usage=data.get("usage", {}),
-                        model=data.get("model", self.model),
-                        finish_reason=data["choices"][0].get("finish_reason"),
-                    )
+                
+                data = response.json()
+                
+                return ModelResponse(
+                    content=data["choices"][0]["message"]["content"],
+                    usage=data.get("usage", {}),
+                    model=data.get("model", self.model),
+                    finish_reason=data["choices"][0].get("finish_reason"),
+                )
                     
             except Exception as e:
                 last_error = e

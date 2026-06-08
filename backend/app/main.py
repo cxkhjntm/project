@@ -12,6 +12,7 @@ from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_
 from app.models import *  # noqa: F401, F403 - ensure all models registered with Base
 from app.routers import providers, role_cards, rooms, sources, discussion, artifacts, filesystem
 from app.seed.loader import load_builtin_roles
+from app.services.model_client import close_global_client
 from app.utils.logger import get_logger, setup_logging
 
 setup_logging(debug=settings.debug)
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("Shutting down Expert Room API")
+    await close_global_client()
 
 
 def create_app(lifespan_fn: AsyncIterator[None] | None = None) -> FastAPI:
