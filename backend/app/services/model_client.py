@@ -1,8 +1,9 @@
 """Unified LLM API client with retry logic."""
 
 import asyncio
+import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -159,6 +160,90 @@ class ModelClient:
                     )
         
         raise ModelClientError(f"Failed after {self.max_retries + 1} attempts: {last_error}")
+
+    async def chat_completion_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stop: Optional[List[str]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Send streaming chat completion request.
+        
+        Args:
+            messages: List of message dicts with role and content
+            temperature: Override default temperature
+            max_tokens: Override default max tokens
+            stop: Stop sequences
+            
+        Yields:
+            Content chunks as they arrive
+            
+        Raises:
+            ModelClientError: On API failure
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature or self.temperature,
+            "max_tokens": max_tokens or self.max_tokens,
+            "stream": True,
+        }
+        if stop:
+            payload["stop"] = stop
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        try:
+            client = await get_global_client()
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                
+                buffer = ""
+                async for chunk in response.aiter_bytes():
+                    buffer += chunk.decode("utf-8", errors="replace")
+                    
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line:
+                            continue
+                        
+                        if line == "data: [DONE]":
+                            return
+                        
+                        if not line.startswith("data: "):
+                            continue
+                        
+                        data_str = line[6:]
+                        
+                        try:
+                            data = json.loads(data_str)
+                            choices = data.get("choices", [])
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                content = delta.get("content")
+                                if content:
+                                    yield content
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse SSE chunk", chunk=data_str[:200])
+                            continue
+                            
+        except httpx.HTTPStatusError as e:
+            raise ModelClientError(
+                f"API returned status {e.response.status_code}: {e.response.text[:500]}"
+            ) from e
+        except httpx.HTTPError as e:
+            raise ModelClientError(f"Stream request failed: {e}") from e
 
     async def test_connection(self) -> Dict[str, Any]:
         """Test API connection.
