@@ -1,11 +1,15 @@
 """FastAPI application entry point."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.database import async_session_factory, init_db
 from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_handler
-from app.database import async_session_factory
+from app.models import *  # noqa: F401, F403 - ensure all models registered with Base
 from app.routers import providers, role_cards, rooms, sources, discussion, artifacts, filesystem
 from app.seed.loader import load_builtin_roles
 from app.utils.logger import get_logger, setup_logging
@@ -14,18 +18,34 @@ setup_logging(debug=settings.debug)
 logger = get_logger(__name__)
 
 
-def create_app() -> FastAPI:
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("Starting Expert Room API", version="0.1.0", debug=settings.debug)
+    await init_db()
+
+    async with async_session_factory() as session:
+        await load_builtin_roles(session)
+        await session.commit()
+
+    yield
+
+    logger.info("Shutting down Expert Room API")
+
+
+def create_app(lifespan_fn: AsyncIterator[None] | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
+    if lifespan_fn is None:
+        lifespan_fn = lifespan
+
     app = FastAPI(
         title="Expert Room API",
         description="AI Expert Team Collaboration Workbench",
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan_fn,
     )
 
-    # CORS configuration for frontend
-    # TODO: Tighten allow_methods and allow_headers before production
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -44,18 +64,6 @@ def create_app() -> FastAPI:
     app.include_router(discussion.router)
     app.include_router(artifacts.router)
     app.include_router(filesystem.router)
-
-    @app.on_event("startup")
-    async def startup_event() -> None:
-        logger.info("Starting Expert Room API", version="0.1.0", debug=settings.debug)
-
-        async with async_session_factory() as session:
-            await load_builtin_roles(session)
-            await session.commit()
-
-    @app.on_event("shutdown")
-    async def shutdown_event() -> None:
-        logger.info("Shutting down Expert Room API")
 
     @app.get("/api/health")
     async def health_check() -> dict[str, str]:
