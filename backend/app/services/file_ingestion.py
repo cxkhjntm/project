@@ -14,6 +14,7 @@ from app.utils.file_filter import (
     is_file_too_large,
 )
 from app.utils.logger import get_logger
+from app.utils.path_validator import validate_path_safety, PathValidationError
 
 logger = get_logger(__name__)
 
@@ -145,6 +146,61 @@ class FileIngestionService:
         await session.flush()
 
         logger.info("Added text source", source_id=source.id, length=len(text_content))
+        return source
+
+    async def ingest_local_file(
+        self,
+        session: AsyncSession,
+        room_id: str,
+        file_path: str,
+    ) -> SharedSource | None:
+        """Ingest a local file directly (no upload).
+
+        Args:
+            session: Database session
+            room_id: Room ID
+            file_path: Absolute path to the local file
+
+        Returns:
+            Created SharedSource or None if file rejected
+
+        Raises:
+            PathValidationError: If path fails safety checks
+            FileNotFoundError: If file does not exist
+        """
+        safe_path = validate_path_safety(file_path)
+        path = Path(safe_path)
+
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if not is_allowed_extension(path.name):
+            logger.warning("Rejected local file: invalid extension", path=file_path)
+            return None
+
+        file_size = path.stat().st_size
+        if is_file_too_large(file_size):
+            logger.warning(
+                "Rejected local file: too large",
+                path=file_path,
+                size=file_size,
+            )
+            return None
+
+        content = read_file_content(safe_path, max_chars=CONTENT_BUDGET_PER_FILE) or ""
+
+        source = SharedSource(
+            id=str(uuid.uuid4()),
+            room_id=room_id,
+            source_type="local_file",
+            path=safe_path,
+            content=content,
+            file_count=1,
+        )
+        session.add(source)
+        await session.flush()
+
+        logger.info("Ingested local file", source_id=source.id, path=safe_path)
         return source
 
     async def get_room_sources(

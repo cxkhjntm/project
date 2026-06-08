@@ -1,60 +1,58 @@
 # 专家团 - Linux 服务器部署指南
 
-本文档指导您将专家团应用部署到 Linux 服务器，实现生产环境运行。
+本文档指导您将专家团应用部署到 Linux 服务器的生产环境中。
 
 ---
 
 ## 目录
 
-- [部署架构](#部署架构)
+- [整体架构](#整体架构)
 - [环境要求](#环境要求)
 - [部署步骤](#部署步骤)
 - [Nginx 配置](#nginx-配置)
-- [Systemd 服务配置](#systemd-服务配置)
+- [Systemd 服务管理](#systemd-服务管理)
 - [SSL/HTTPS 配置](#sslhttps-配置)
 - [防火墙配置](#防火墙配置)
 - [日志管理](#日志管理)
-- [监控与维护](#监控与维护)
+- [日常维护](#日常维护)
 - [常见问题](#常见问题)
 
 ---
 
-## 部署架构
+## 整体架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        用户浏览器                            │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        用户浏览器                              │
+└──────────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │                      Nginx (反向代理)                        │
 │                    端口: 80 (HTTP) / 443 (HTTPS)             │
-├─────────────────────────────────────────────────────────────┤
-│  静态文件请求  │           API 请求                          │
+└──────────────────────────────────────────────────────────────┘
+│  静态文件服务 │           API 代理                            │
 │       │       │              │                              │
 │       ▼       │              ▼                              │
 │  /var/www/    │    http://127.0.0.1:8000                    │
 │  expert-room/ │              │                              │
-│  (前端文件)   │              ▼                              │
-│               │    ┌─────────────────┐                      │
-│               │    │  FastAPI 后端    │                      │
-│               │    │  (Uvicorn)      │                      │
-│               │    └─────────────────┘                      │
+│  (前端文件)   │    ┌─────────────────────┐                  │
+│               │    │  FastAPI 服务        │                  │
+│               │    │  (Uvicorn)          │                  │
+│               │    └─────────────────────┘                  │
 │               │              │                              │
-│               │              ▼                              │
-│               │    ┌─────────────────┐                      │
-│               │    │  SQLite 数据库   │                      │
-│               │    │  expert_room.db │                      │
-│               │    └─────────────────┘                      │
-└─────────────────────────────────────────────────────────────┘
+│               │    ┌─────────────────────┐                  │
+│               │    │  SQLite 数据库       │                  │
+│               │    │  expert_room.db     │                  │
+│               │    └─────────────────────┘                  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 环境要求
 
-### 服务器配置
+### 硬件要求
 
 | 项目 | 最低要求 | 推荐配置 |
 |------|----------|----------|
@@ -77,9 +75,9 @@
 
 ## 部署步骤
 
-### 1. 服务器基础环境
+### 1. 安装基础软件
 
-#### 1.1 更新系统包
+#### 1.1 更新系统
 
 ```bash
 # Ubuntu/Debian
@@ -117,12 +115,6 @@ python3.11 --version
 # 使用 NodeSource 安装
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
-
-# 或使用 nvm 安装
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-source ~/.bashrc
-nvm install 18
-nvm use 18
 
 # 验证安装
 node --version
@@ -170,14 +162,14 @@ sudo mkdir -p /opt/expert-room
 sudo chown $USER:$USER /opt/expert-room
 ```
 
-#### 2.2 克隆代码
+#### 2.2 获取代码
 
 ```bash
 cd /opt/expert-room
-git clone <您的仓库地址> .
+git clone <你的仓库地址> .
 ```
 
-或上传代码：
+或本地上传：
 
 ```bash
 # 在本地打包
@@ -191,7 +183,7 @@ cd /opt/expert-room
 tar -xzf expert-room.tar.gz
 ```
 
-#### 2.3 配置 Python 虚拟环境
+#### 2.3 创建 Python 虚拟环境
 
 ```bash
 cd /opt/expert-room/project/backend
@@ -209,7 +201,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 #### 2.4 配置环境变量
 
 ```bash
-# 复制环境变量模板
+# 复制配置模板
 cp .env.example .env
 
 # 生成加密密钥
@@ -232,10 +224,10 @@ DEBUG=false
 # 数据库
 DATABASE_URL=sqlite+aiosqlite:///./expert_room.db
 
-# CORS - 替换为您的域名（JSON 数组格式）
+# CORS - 替换为你的域名（JSON 数组格式）
 CORS_ORIGINS=["https://your-domain.com","https://www.your-domain.com"]
 
-# 安全 - 填入生成的密钥
+# 安全 - 填入你生成的密钥
 ENCRYPTION_KEY=your-generated-key-here
 
 # LLM 默认参数
@@ -250,24 +242,24 @@ MAX_FILE_SIZE_MB=10
 #### 2.5 初始化数据库
 
 ```bash
-# 确保在虚拟环境中
+# 确保虚拟环境已激活
 source .venv/bin/activate
 
 # 初始化数据库
-alembic upgrade head
+python -c "from app.database import init_db; import asyncio; asyncio.run(init_db())"
 ```
 
-#### 2.6 测试后端启动
+#### 2.6 测试后端服务
 
 ```bash
-# 测试运行
+# 启动服务
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# 如果看到以下输出，说明启动成功：
+# 看到以下输出表示成功：
 # INFO:     Uvicorn running on http://0.0.0.0:8000
 # INFO:     Application startup complete.
 
-# 按 Ctrl+C 停止测试
+# 按 Ctrl+C 停止
 ```
 
 ---
@@ -288,26 +280,10 @@ npm install
 
 #### 3.3 配置 API 地址
 
-编辑 `vite.config.ts`，修改代理配置为生产环境地址：
+编辑 `vite.config.ts`，修改代理配置为你的服务器地址：
 
 ```bash
 nano vite.config.ts
-```
-
-修改内容：
-
-```typescript
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  base: '/',  // 如果部署在子目录，改为 '/子目录路径/'
-  build: {
-    outDir: 'dist',
-    sourcemap: false,
-  },
-})
 ```
 
 #### 3.4 构建生产版本
@@ -316,7 +292,7 @@ export default defineConfig({
 npm run build
 ```
 
-构建完成后，`dist/` 目录包含所有静态文件。
+构建完成后，`dist/` 目录中包含所有静态文件。
 
 #### 3.5 部署前端文件
 
@@ -347,18 +323,18 @@ sudo nano /etc/nginx/sites-available/expert-room
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com www.your-domain.com;  # 替换为您的域名
+    server_name your-domain.com www.your-domain.com;  # 替换为你的域名
 
     # 前端静态文件
     root /var/www/expert-room;
     index index.html;
 
-    # 前端路由 - 所有非文件请求返回 index.html
+    # 前端路由 - 所有文件请求返回 index.html
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # API 代理 - 转发到后端服务
+    # API 请求 - 转发到后端服务
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -374,7 +350,7 @@ server {
         proxy_read_timeout 86400s;
     }
 
-    # Swagger 文档（可选，生产环境可禁用）
+    # Swagger 文档（可选，开发环境建议开启）
     location /docs {
         proxy_pass http://127.0.0.1:8000/docs;
         proxy_set_header Host $host;
@@ -419,13 +395,13 @@ sudo rm /etc/nginx/sites-enabled/default
 # 测试配置
 sudo nginx -t
 
-# 重载 Nginx
+# 重新加载 Nginx
 sudo systemctl reload nginx
 ```
 
 ---
 
-## Systemd 服务配置
+## Systemd 服务管理
 
 ### 创建后端服务文件
 
@@ -433,7 +409,7 @@ sudo systemctl reload nginx
 sudo nano /etc/systemd/system/expert-room.service
 ```
 
-服务配置：
+配置内容：
 
 ```ini
 [Unit]
@@ -465,7 +441,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-### 启动服务
+### 管理服务
 
 ```bash
 # 重新加载 systemd 配置
@@ -481,7 +457,7 @@ sudo systemctl enable expert-room
 sudo systemctl status expert-room
 ```
 
-### 服务管理命令
+### 常用服务命令
 
 ```bash
 # 启动服务
@@ -598,12 +574,12 @@ sudo ufw status
 sudo systemctl start firewalld
 sudo systemctl enable firewalld
 
-# 允许服务
+# 添加规则
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --permanent --add-service=https
 sudo firewall-cmd --permanent --add-service=ssh
 
-# 重载配置
+# 重新加载规则
 sudo firewall-cmd --reload
 
 # 查看状态
@@ -618,7 +594,7 @@ sudo firewall-cmd --list-all
 
 | 日志类型 | 位置 |
 |----------|------|
-| **后端日志** | `sudo journalctl -u expert-room -f` |
+| **应用日志** | `sudo journalctl -u expert-room -f` |
 | **Nginx 访问日志** | `/var/log/nginx/expert-room-access.log` |
 | **Nginx 错误日志** | `/var/log/nginx/expert-room-error.log` |
 
@@ -650,7 +626,7 @@ sudo nano /etc/logrotate.d/expert-room
 
 ---
 
-## 监控与维护
+## 日常维护
 
 ### 健康检查
 
@@ -669,7 +645,7 @@ sudo systemctl status expert-room
 sudo systemctl status nginx
 ```
 
-### 磁盘空间监控
+### 磁盘空间检查
 
 ```bash
 # 查看磁盘使用
@@ -703,10 +679,10 @@ mkdir -p $BACKUP_DIR
 # 备份数据库
 cp $DB_PATH "$BACKUP_DIR/expert_room_$DATE.db"
 
-# 备份环境变量
+# 备份配置文件
 cp /opt/expert-room/project/backend/.env "$BACKUP_DIR/env_$DATE.backup"
 
-# 保留最近 30 天的备份
+# 删除超过 30 天的备份
 find $BACKUP_DIR -name "*.db" -mtime +30 -delete
 find $BACKUP_DIR -name "*.backup" -mtime +30 -delete
 
@@ -734,9 +710,9 @@ sudo crontab -e
 
 ## 常见问题
 
-### Q1: 服务启动失败
+### Q1: 后端服务启动失败
 
-**检查日志**：
+**查看日志**：
 ```bash
 sudo journalctl -u expert-room -n 50
 ```
@@ -764,7 +740,7 @@ sudo netstat -tlnp | grep 8000
 
 ### Q3: 前端页面空白
 
-**原因**：前端构建文件未正确部署
+**原因**：前端静态文件未正确部署
 
 **解决**：
 ```bash
@@ -796,7 +772,7 @@ sudo systemctl restart expert-room
 
 ### Q5: SSE 连接中断
 
-**原因**：Nginx 代理配置问题
+**原因**：Nginx 超时配置不正确
 
 **解决**：确保 Nginx 配置包含 SSE 相关设置：
 
@@ -817,53 +793,14 @@ location /api/ {
 **解决**：
 1. Nginx 配置：`client_max_body_size 20M;`
 2. 应用配置：`.env` 中 `MAX_FILE_SIZE_MB=10`
-3. 检查目录权限：`sudo chown -R www-data:www-data /opt/expert-room/project/backend/uploads`
-
----
-
-## 性能优化建议
-
-### 1. 使用 Gunicorn 替代 Uvicorn
-
-生产环境推荐使用 Gunicorn 管理 Uvicorn worker：
-
-```bash
-pip install gunicorn
-```
-
-修改服务配置：
-
-```ini
-ExecStart=/opt/expert-room/project/backend/.venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000
-```
-
-### 2. 启用 Nginx Gzip 压缩
-
-```nginx
-gzip on;
-gzip_vary on;
-gzip_proxied any;
-gzip_comp_level 6;
-gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-```
-
-### 3. 配置静态资源 CDN
-
-将前端静态资源部署到 CDN，减轻服务器负担。
-
-### 4. 数据库优化
-
-对于高并发场景，考虑：
-- 使用 PostgreSQL 替代 SQLite
-- 添加 Redis 缓存
-- 配置数据库连接池
+3. 上传目录权限：`sudo chown -R www-data:www-data /opt/expert-room/project/backend/uploads`
 
 ---
 
 ## 下一步
 
-- 阅读 [手动更新操作指南](./手动更新操作指南.md) 了解版本更新流程
-- 阅读 [用户启动使用指南](./用户启动使用指南.md) 了解功能使用方法
+- 阅读 [手动分步操作指南](./手动分步操作指南.md) 了解版本更新流程
+- 阅读 [用户快速使用指南](./用户快速使用指南.md) 了解功能使用方法
 
 ---
 

@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 import tempfile
 import os
+import uuid
 
 from app.utils.file_filter import (
     is_allowed_extension,
@@ -12,6 +13,8 @@ from app.utils.file_filter import (
     scan_directory,
     read_file_content,
 )
+from app.utils.path_validator import PathValidationError
+from app.services.file_ingestion import FileIngestionService
 
 
 class TestFileFilter:
@@ -77,3 +80,122 @@ class TestFileFilter:
         """Test reading nonexistent file returns None."""
         content = read_file_content("/nonexistent/file.txt")
         assert content is None
+
+
+class TestIngestLocalFile:
+    """Test FileIngestionService.ingest_local_file."""
+
+    @pytest.fixture
+    def service(self) -> FileIngestionService:
+        return FileIngestionService()
+
+    @pytest.mark.asyncio
+    async def test_ingest_valid_txt_file(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test ingesting a valid .txt file."""
+        test_file = tmp_path / "hello.txt"
+        test_file.write_text("Hello, World!")
+        room_id = str(uuid.uuid4())
+
+        source = await service.ingest_local_file(db_session, room_id, str(test_file))
+
+        assert source is not None
+        assert source.source_type == "local_file"
+        assert source.room_id == room_id
+        assert source.path == str(test_file.resolve())
+        assert "Hello, World!" in source.content
+
+    @pytest.mark.asyncio
+    async def test_ingest_valid_py_file(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test ingesting a valid .py file."""
+        test_file = tmp_path / "script.py"
+        test_file.write_text("print('hello')")
+        room_id = str(uuid.uuid4())
+
+        source = await service.ingest_local_file(db_session, room_id, str(test_file))
+
+        assert source is not None
+        assert source.source_type == "local_file"
+
+    @pytest.mark.asyncio
+    async def test_rejects_disallowed_extension(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that files with disallowed extensions are rejected."""
+        test_file = tmp_path / "binary.exe"
+        test_file.write_bytes(b"\x00\x00\x00")
+        room_id = str(uuid.uuid4())
+
+        source = await service.ingest_local_file(db_session, room_id, str(test_file))
+        assert source is None
+
+    @pytest.mark.asyncio
+    async def test_rejects_nonexistent_file(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that nonexistent file raises FileNotFoundError."""
+        room_id = str(uuid.uuid4())
+        fake_path = str(tmp_path / "does_not_exist.txt")
+
+        with pytest.raises(FileNotFoundError):
+            await service.ingest_local_file(db_session, room_id, fake_path)
+
+    @pytest.mark.asyncio
+    async def test_rejects_dot_dot_traversal(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that path traversal is rejected."""
+        room_id = str(uuid.uuid4())
+        traversal_path = str(tmp_path / ".." / ".." / "etc" / "passwd")
+
+        with pytest.raises(PathValidationError, match="traversal"):
+            await service.ingest_local_file(db_session, room_id, traversal_path)
+
+    @pytest.mark.asyncio
+    async def test_rejects_tilde_path(
+        self, service: FileIngestionService, db_session
+    ) -> None:
+        """Test that tilde expansion path is rejected."""
+        room_id = str(uuid.uuid4())
+
+        with pytest.raises(PathValidationError, match="Tilde"):
+            await service.ingest_local_file(db_session, room_id, "~/secret.txt")
+
+    @pytest.mark.asyncio
+    async def test_rejects_directory(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that directory path raises FileNotFoundError."""
+        room_id = str(uuid.uuid4())
+
+        with pytest.raises(FileNotFoundError):
+            await service.ingest_local_file(db_session, room_id, str(tmp_path))
+
+    @pytest.mark.asyncio
+    async def test_content_truncated_to_budget(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that large file content is truncated."""
+        test_file = tmp_path / "large.txt"
+        test_file.write_text("x" * 200_000)
+        room_id = str(uuid.uuid4())
+
+        source = await service.ingest_local_file(db_session, room_id, str(test_file))
+
+        assert source is not None
+        assert len(source.content) <= 60_000
+
+    @pytest.mark.asyncio
+    async def test_rejects_oversized_file(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that files exceeding size limit are rejected."""
+        test_file = tmp_path / "huge.txt"
+        test_file.write_bytes(b"x" * (11 * 1024 * 1024))
+        room_id = str(uuid.uuid4())
+
+        source = await service.ingest_local_file(db_session, room_id, str(test_file))
+        assert source is None

@@ -8,6 +8,7 @@ from app.utils.path_validator import (
     PathValidationError,
     validate_path,
     validate_file_path,
+    validate_path_safety,
 )
 
 
@@ -144,3 +145,55 @@ class TestValidateFilePath:
         """Test with empty allowed extensions set."""
         allowed: set[str] = set()
         assert validate_file_path("file.txt", allowed) is False
+
+
+class TestValidatePathSafety:
+    """Test validate_path_safety function."""
+
+    def test_valid_absolute_path(self, tmp_path: Path) -> None:
+        """Test that a valid absolute path passes."""
+        test_file = tmp_path / "file.txt"
+        test_file.write_text("content")
+        result = validate_path_safety(str(test_file))
+        assert os.path.isabs(result)
+
+    def test_rejects_dot_dot_traversal(self) -> None:
+        """Test that .. traversal is rejected."""
+        with pytest.raises(PathValidationError, match="traversal"):
+            validate_path_safety("/some/path/../../../etc/passwd")
+
+    def test_rejects_dot_dot_in_middle(self, tmp_path: Path) -> None:
+        """Test that .. in middle of path is rejected."""
+        with pytest.raises(PathValidationError, match="traversal"):
+            validate_path_safety(str(tmp_path / "sub" / ".." / "other"))
+
+    def test_rejects_tilde_prefix(self) -> None:
+        """Test that ~ expansion is rejected."""
+        with pytest.raises(PathValidationError, match="Tilde"):
+            validate_path_safety("~/Documents/secret.txt")
+
+    def test_rejects_tilde_with_spaces(self) -> None:
+        """Test that ~ with leading spaces is rejected."""
+        with pytest.raises(PathValidationError, match="Tilde"):
+            validate_path_safety("  ~/file.txt")
+
+    def test_rejects_empty_path(self) -> None:
+        """Test that empty path is rejected."""
+        with pytest.raises(PathValidationError, match="empty"):
+            validate_path_safety("")
+
+    def test_accepts_valid_relative_path(self, tmp_path: Path) -> None:
+        """Test that a simple relative path without traversal passes."""
+        test_file = tmp_path / "file.txt"
+        test_file.write_text("content")
+        result = validate_path_safety(str(test_file))
+        assert os.path.isabs(result)
+
+    def test_returns_resolved_path(self, tmp_path: Path) -> None:
+        """Test that returned path is resolved."""
+        test_file = tmp_path / "sub" / "file.txt"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text("content")
+        result = validate_path_safety(str(test_file))
+        assert ".." not in result
+        assert str(test_file.resolve()) == result

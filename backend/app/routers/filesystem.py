@@ -4,8 +4,15 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_session
+from app.schemas.shared_source import SharedSourceResponse
+from app.services.file_ingestion import file_ingestion_service
+from app.services.room_service import room_service
+from app.utils.path_validator import PathValidationError
 
 router = APIRouter(prefix="/api/filesystem", tags=["filesystem"])
 
@@ -36,6 +43,10 @@ class MkdirRequest(BaseModel):
 class MkdirResponse(BaseModel):
     path: str
     success: bool
+
+
+class LocalFileRequest(BaseModel):
+    file_path: str
 
 
 EXCLUDED_DIRS = {
@@ -143,3 +154,38 @@ async def create_directory(request: MkdirRequest) -> MkdirResponse:
         raise HTTPException(status_code=500, detail=f"创建文件夹失败: {e}")
 
     return MkdirResponse(path=str(target), success=True)
+
+
+@router.post(
+    "/rooms/{room_id}/sources/local",
+    response_model=SharedSourceResponse,
+    status_code=201,
+)
+async def add_local_file_source(
+    room_id: str,
+    request: LocalFileRequest,
+    session: AsyncSession = Depends(get_session),
+) -> SharedSourceResponse:
+    """Add a local file as shared source (direct read, no upload)."""
+    room = await room_service.get_by_id(session, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    try:
+        source = await file_ingestion_service.ingest_local_file(
+            session, room_id, request.file_path
+        )
+    except PathValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    if not source:
+        raise HTTPException(
+            status_code=400,
+            detail="File rejected: invalid extension or too large",
+        )
+
+    return SharedSourceResponse.model_validate(source)

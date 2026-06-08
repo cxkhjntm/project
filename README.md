@@ -44,7 +44,33 @@
 - Node.js 18+
 - npm 或 pnpm
 
-### 后端启动
+### 一键启动（推荐）
+
+#### Windows 用户
+
+需要已安装 Anaconda/Miniconda 并创建 `Test` 环境：
+
+```bash
+# 创建 Conda 环境（如果尚未创建）
+conda create -n Test python=3.11 -y
+
+# 双击运行启动脚本
+start_windows.bat
+```
+
+#### Linux 用户
+
+```bash
+chmod +x start_linux.sh
+./start_linux.sh
+
+# 停止服务
+./stop_linux.sh
+```
+
+### 手动启动
+
+#### 后端启动
 
 ```bash
 cd backend
@@ -64,13 +90,13 @@ cp .env.example .env
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 # 初始化数据库
-alembic upgrade head
+python -c "from app.database import init_db; import asyncio; asyncio.run(init_db())"
 
 # 启动服务
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 前端启动
+#### 前端启动
 
 ```bash
 cd frontend
@@ -83,6 +109,8 @@ npm run dev
 ```
 
 访问 http://localhost:5173 即可使用。
+
+> **详细文档**：请查看 `ToUse/` 目录下的使用指南。
 
 ### 环境变量配置
 

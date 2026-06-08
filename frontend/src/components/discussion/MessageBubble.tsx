@@ -7,6 +7,8 @@ interface MessageBubbleProps {
   showExpertiseBadge?: boolean;
   /** Map from role_card_id to display name, used to resolve expert names */
   participantNameMap?: Record<string, string>;
+  /** Whether this message is currently being streamed (typing indicator) */
+  isStreaming?: boolean;
 }
 
 const EXPERT_COLORS: Record<string, string> = {
@@ -65,6 +67,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   showExpertiseBadge = false,
   participantNameMap = {},
+  isStreaming = false,
 }) => {
   const isOrchestrator = message.sender_type === 'orchestrator';
   const isSystem = message.sender_type === 'system';
@@ -91,11 +94,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   if (isOrchestrator) {
     return (
       <div className="flex justify-center mb-4">
-        <div className="bg-indigo-500/5 backdrop-blur-sm border border-indigo-200/30 rounded-2xl px-5 py-3 max-w-[80%] shadow-sm text-center">
+        <div className={`bg-indigo-500/5 backdrop-blur-sm border border-indigo-200/30 rounded-2xl px-5 py-3 max-w-[80%] shadow-sm text-center ${isStreaming ? 'streaming-message' : ''}`}>
           <div className="text-xs text-indigo-500 font-semibold mb-1">
             🎯 主持人 · 第 {message.round} 轮讨论
           </div>
-          <div className="text-sm text-slate-700 font-medium leading-relaxed">{message.content}</div>
+          <div className="text-sm text-slate-700 font-medium leading-relaxed">
+            {message.content}
+            {isStreaming && <span className="typing-cursor" />}
+          </div>
         </div>
       </div>
     );
@@ -124,7 +130,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div className="flex justify-start mb-4">
-      <div className="max-w-[80%] rounded-2xl bg-white/70 backdrop-blur-sm shadow-glass border border-slate-200/30 overflow-hidden hover:border-aqua-300/40 transition-colors duration-snappy">
+      <div className={`max-w-[80%] rounded-2xl bg-white/70 backdrop-blur-sm shadow-glass border border-slate-200/30 overflow-hidden hover:border-aqua-300/40 transition-colors duration-snappy ${isStreaming ? 'streaming-message' : ''}`}>
         <div className="w-[4px] float-left h-full min-h-[60px]" style={{ backgroundColor: expertColor }} />
         <div className="px-4 py-3">
           <div className="flex items-center gap-2 mb-1.5">
@@ -142,7 +148,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
             <span className="text-xs text-slate-400">第 {message.round} 轮</span>
           </div>
-          <div className="text-slate-700 whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
+          <div className="text-slate-700 whitespace-pre-wrap text-sm leading-relaxed">
+            {message.content}
+            {isStreaming && <span className="typing-cursor" />}
+          </div>
           {message.key_point && (
             <div className="mt-2 pt-2 border-t border-gray-100">
               <div className="text-xs text-gray-500">

@@ -86,9 +86,46 @@ def validate_output_directory(path: str) -> str:
     return path
 
 
+def validate_path_safety(file_path: str) -> str:
+    """Validate path safety for local file access (no base directory constraint).
+
+    Checks for common path traversal and injection patterns:
+    - Rejects paths containing '..' segments
+    - Rejects paths starting with '~' (home directory expansion)
+    - Rejects empty paths
+
+    Args:
+        file_path: Path to validate
+
+    Returns:
+        Resolved absolute path
+
+    Raises:
+        PathValidationError: If path contains dangerous patterns
+    """
+    if not file_path:
+        raise PathValidationError("Path cannot be empty")
+
+    p = Path(file_path)
+
+    if file_path.strip().startswith("~"):
+        raise PathValidationError(
+            f"Tilde expansion not allowed: '{file_path}'"
+        )
+
+    if ".." in p.parts:
+        raise PathValidationError(
+            f"Path traversal detected: '{file_path}' contains '..'"
+        )
+
+    resolved = p.resolve()
+    return str(resolved)
+
+
 __all__ = [
     "PathValidationError",
     "validate_path",
     "validate_file_path",
     "validate_output_directory",
+    "validate_path_safety",
 ]

@@ -54,3 +54,30 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.streaming-message {
+  opacity: 0.85;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.15), 0 2px 8px rgba(99, 102, 241, 0.08);
+  animation: streaming-pulse 2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.15), 0 2px 8px rgba(99, 102, 241, 0.08); }
+  50% { box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25), 0 2px 12px rgba(99, 102, 241, 0.15); }
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: #6366f1;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}

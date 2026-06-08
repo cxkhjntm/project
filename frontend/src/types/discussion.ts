@@ -50,11 +50,18 @@ export interface CostUpdateEvent {
   round: number;
 }
 
-export type DiscussionEventType = 'thinking' | 'message' | 'artifact' | 'error' | 'done' | 'status' | 'cost_update';
+export interface TokenEvent {
+  room_id: string;
+  role: string;
+  content: string;
+}
+
+export type DiscussionEventType = 'thinking' | 'message' | 'token' | 'artifact' | 'error' | 'done' | 'status' | 'cost_update';
 
 export interface UseDiscussionSSEReturn {
   messages: DiscussionMessage[];
   thinking: Record<string, boolean>;
+  streamingMessages: Record<string, string>;
   error: string | null;
   isComplete: boolean;
   status: string;

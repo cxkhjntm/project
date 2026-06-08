@@ -3,6 +3,7 @@ import type {
   DiscussionMessage,
   ErrorEvent,
   ThinkingEvent,
+  TokenEvent,
   StatusEvent,
   CostUpdateEvent,
   UseDiscussionSSEReturn,
@@ -21,6 +22,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
 } {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [thinking, setThinking] = useState<Record<string, boolean>>({});
+  const [streamingMessages, setStreamingMessages] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [status, setStatus] = useState<string>('idle');
@@ -86,10 +88,32 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
         }
       });
 
+      eventSource.addEventListener('token', (event) => {
+        try {
+          const data: TokenEvent = JSON.parse(event.data);
+          setStreamingMessages((prev) => ({
+            ...prev,
+            [data.role]: (prev[data.role] || '') + data.content,
+          }));
+        } catch (e) {
+          console.error('Parse token error:', e);
+        }
+      });
+
       eventSource.addEventListener('message', (event) => {
         try {
           const data: DiscussionMessage = JSON.parse(event.data);
           setMessages((prev) => [...prev, data]);
+
+          if (data.sender_type === 'orchestrator') {
+            setStreamingMessages((prev) => {
+              const next = { ...prev };
+              delete next['主持人'];
+              return next;
+            });
+          } else {
+            setStreamingMessages({});
+          }
 
           // 清除 thinking 状态：
           // orchestrator 消息的 sender_id 为 null，但 thinking 是用 role 名("主持人")设置的
@@ -159,8 +183,8 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
           JSON.parse(event.data);
           setIsComplete(true);
           setStatus('completed');
-          // 清除所有 thinking 状态
           setThinking({});
+          setStreamingMessages({});
           closeConnection();
         } catch (e) {
           console.error('Failed to parse done event:', e);
@@ -186,6 +210,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     async (roomId: string) => {
       setMessages([]);
       setThinking({});
+      setStreamingMessages({});
       setError(null);
       setIsComplete(false);
       setStatus('connecting');
@@ -204,6 +229,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     closeConnection();
     setMessages([]);
     setThinking({});
+    setStreamingMessages({});
     setError(null);
     setIsComplete(false);
     setStatus('idle');
@@ -218,6 +244,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
   return {
     messages,
     thinking,
+    streamingMessages,
     error,
     isComplete,
     status,

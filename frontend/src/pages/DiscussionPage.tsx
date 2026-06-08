@@ -42,6 +42,7 @@ export default function DiscussionPage() {
   const {
     messages,
     thinking,
+    streamingMessages,
     error,
     isComplete,
     status,
@@ -400,6 +401,25 @@ export default function DiscussionPage() {
 
             {/* Message list */}
             {messageElements}
+
+            {/* Streaming messages (currently being generated) */}
+            {Object.entries(streamingMessages).map(([roleName, content]) => (
+              <MessageBubble
+                key={`stream-${roleName}`}
+                message={{
+                  id: `stream-${roleName}`,
+                  sender_type: roleName === '主持人' ? 'orchestrator' : 'expert',
+                  sender_id: roleName,
+                  content: content,
+                  round: currentRound,
+                  room_id: roomId || '',
+                  citations: null,
+                  created_at: new Date().toISOString(),
+                }}
+                isStreaming={true}
+                participantNameMap={participantNameMap}
+              />
+            ))}
 
             {/* Thinking indicators */}
             {thinkingRoles.map((role) => (

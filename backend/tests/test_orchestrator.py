@@ -3,7 +3,14 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.orchestrator import Orchestrator, DiscussionState, SSEEventType
+from app.services.orchestrator import (
+    Orchestrator,
+    DiscussionState,
+    SSEEventType,
+    CONVERGENCE_KEYWORDS,
+    check_convergence,
+    parse_host_action,
+)
 
 
 @pytest.mark.asyncio
@@ -371,3 +378,312 @@ async def test_orchestrator_turn_sends_message_after_stream():
         assert msg_data["sender_type"] == "orchestrator"
         assert msg_data["content"] == "Round 1 complete"
         assert msg_data["round"] == 1
+
+
+# ============================================================
+# Tests for convergence logic (Phase 3.2)
+# ============================================================
+
+
+def test_parse_host_action_converge():
+    """Test parsing ACTION: converge from host message."""
+    content = "讨论已充分，ACTION: converge"
+    action = parse_host_action(content)
+    assert action is not None
+    assert action["type"] == "converge"
+
+
+def test_parse_host_action_synthesize():
+    """Test parsing ACTION: synthesize from host message."""
+    content = "可以开始总结了，ACTION: synthesize"
+    action = parse_host_action(content)
+    assert action is not None
+    assert action["type"] == "synthesize"
+
+
+def test_parse_host_action_next():
+    """Test parsing ACTION: next:expert_id from host message."""
+    content = "请下一位发言，ACTION: next:expert_1"
+    action = parse_host_action(content)
+    assert action is not None
+    assert action["type"] == "next"
+    assert action["expert_id"] == "expert_1"
+
+
+def test_parse_host_action_none():
+    """Test parsing when no ACTION is present."""
+    content = "请大家继续讨论"
+    action = parse_host_action(content)
+    assert action is None
+
+
+def test_check_convergence_with_keywords():
+    """Test convergence detection with keywords."""
+    messages = [
+        {"round": 1, "sender_type": "expert", "content": "我同意这个方案"},
+        {"round": 1, "sender_type": "expert", "content": "没有异议，可行"},
+    ]
+    assert check_convergence(messages) is True
+
+
+def test_check_convergence_without_keywords():
+    """Test no convergence when keywords absent."""
+    messages = [
+        {"round": 1, "sender_type": "expert", "content": "我觉得还需要讨论"},
+        {"round": 1, "sender_type": "expert", "content": "有不同意见"},
+    ]
+    assert check_convergence(messages) is False
+
+
+def test_check_convergence_insufficient_messages():
+    """Test no convergence with fewer than 2 expert messages."""
+    messages = [
+        {"round": 1, "sender_type": "expert", "content": "同意"},
+    ]
+    assert check_convergence(messages) is False
+
+
+def test_convergence_keywords_preserved():
+    """Test that CONVERGENCE_KEYWORDS is preserved."""
+    assert "可行" in CONVERGENCE_KEYWORDS
+    assert "同意" in CONVERGENCE_KEYWORDS
+    assert "没有异议" in CONVERGENCE_KEYWORDS
+    assert "LGTM" in CONVERGENCE_KEYWORDS
+
+
+def test_check_convergence_function_preserved():
+    """Test that check_convergence function is preserved."""
+    assert callable(check_convergence)
+    # Should work with empty list
+    assert check_convergence([]) is False
+
+
+@pytest.mark.asyncio
+async def test_action_converge_stops_discussion():
+    """Test that ACTION: converge stops discussion immediately."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=5,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(
+                    base_url="http://test.com",
+                    default_model="gpt-4",
+                ),
+            )
+        ],
+    )
+
+    orchestrator = Orchestrator(
+        session=mock_session,
+        room=room,
+        on_event=mock_on_event,
+    )
+
+    orchestrator._run_orchestrator_turn = AsyncMock(
+        return_value="讨论充分，ACTION: converge"
+    )
+    orchestrator._run_expert_turn = AsyncMock()
+    orchestrator._update_rolling_summary = AsyncMock()
+    orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
+    orchestrator.load_shared_sources = AsyncMock()
+
+    result = await orchestrator.run_discussion()
+
+    assert result["success"] is True
+    assert result["total_rounds"] == 1
+    assert orchestrator._run_expert_turn.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_action_synthesize_stops_discussion():
+    """Test that ACTION: synthesize stops discussion immediately."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=5,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(
+                    base_url="http://test.com",
+                    default_model="gpt-4",
+                ),
+            )
+        ],
+    )
+
+    orchestrator = Orchestrator(
+        session=mock_session,
+        room=room,
+        on_event=mock_on_event,
+    )
+
+    orchestrator._run_orchestrator_turn = AsyncMock(
+        return_value="可以总结了，ACTION: synthesize"
+    )
+    orchestrator._run_expert_turn = AsyncMock()
+    orchestrator._update_rolling_summary = AsyncMock()
+    orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
+    orchestrator.load_shared_sources = AsyncMock()
+
+    result = await orchestrator.run_discussion()
+
+    assert result["success"] is True
+    assert result["total_rounds"] == 1
+
+
+@pytest.mark.asyncio
+async def test_keyword_fallback_when_no_action():
+    """Test keyword matching fallback when no ACTION is present."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=5,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(
+                    base_url="http://test.com",
+                    default_model="gpt-4",
+                ),
+            )
+        ],
+    )
+
+    orchestrator = Orchestrator(
+        session=mock_session,
+        room=room,
+        on_event=mock_on_event,
+    )
+
+    orchestrator.current_round = 2
+    orchestrator.all_messages = [
+        {"round": 1, "sender_type": "expert", "content": "同意这个方案"},
+        {"round": 1, "sender_type": "expert", "content": "没有异议"},
+        {"round": 2, "sender_type": "expert", "content": "可行"},
+        {"round": 2, "sender_type": "expert", "content": "LGTM"},
+    ]
+
+    orchestrator._run_orchestrator_turn = AsyncMock(
+        return_value="请大家继续讨论"
+    )
+    orchestrator._run_expert_turn = AsyncMock()
+    orchestrator._update_rolling_summary = AsyncMock()
+    orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
+    orchestrator.load_shared_sources = AsyncMock()
+
+    original_should_continue = orchestrator.should_continue
+    call_count = 0
+
+    def mock_should_continue():
+        nonlocal call_count
+        call_count += 1
+        return call_count <= 1
+
+    orchestrator.should_continue = mock_should_continue
+
+    result = await orchestrator.run_discussion()
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_force_convergence_at_max_rounds():
+    """Test that discussion stops at max rounds regardless of convergence."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=3,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(
+                    base_url="http://test.com",
+                    default_model="gpt-4",
+                ),
+            )
+        ],
+    )
+
+    orchestrator = Orchestrator(
+        session=mock_session,
+        room=room,
+        on_event=mock_on_event,
+    )
+
+    # Mock _run_orchestrator_turn to return no ACTION
+    orchestrator._run_orchestrator_turn = AsyncMock(
+        return_value="继续讨论"
+    )
+    orchestrator._run_expert_turn = AsyncMock()
+    orchestrator._update_rolling_summary = AsyncMock()
+    orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
+    orchestrator.load_shared_sources = AsyncMock()
+
+    result = await orchestrator.run_discussion()
+
+    assert result["success"] is True
+    assert result["total_rounds"] == 3  # Stopped at max rounds
+
+
+@pytest.mark.asyncio
+async def test_min_2_rounds_before_convergence():
+    """Test that convergence requires at least 2 rounds."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=5,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(
+                    base_url="http://test.com",
+                    default_model="gpt-4",
+                ),
+            )
+        ],
+    )
+
+    orchestrator = Orchestrator(
+        session=mock_session,
+        room=room,
+        on_event=mock_on_event,
+    )
+
+    # Set up state: only 1 round completed with convergence keywords
+    orchestrator.current_round = 1
+    orchestrator.all_messages = [
+        {"round": 1, "sender_type": "expert", "content": "同意"},
+        {"round": 1, "sender_type": "expert", "content": "没有异议"},
+    ]
+
+    # _check_convergence should return False because current_round < 2
+    assert orchestrator._check_convergence() is False
+
+
+def test_check_convergence_requires_expert_messages():
+    """Test that convergence only counts expert messages."""
+    messages = [
+        {"round": 1, "sender_type": "orchestrator", "content": "同意"},
+        {"round": 1, "sender_type": "orchestrator", "content": "没有异议"},
+    ]
+    # Should fail because no expert messages
+    assert check_convergence(messages) is False
