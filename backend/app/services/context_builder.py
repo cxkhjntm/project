@@ -188,6 +188,20 @@ class ContextBuilder:
         expert_names = ", ".join(e["name"] for e in experts)
         file_contents = self._build_file_contents(shared_sources)
 
+        is_near_end = current_round >= total_rounds - 1
+
+        convergence_section = """
+## 收敛判断标准
+当以下条件满足时，判断讨论已收敛：
+- 专家们的观点已经达成一致，没有重大分歧
+- 没有新的信息或观点出现
+- 讨论已经充分，可以得出结论
+- 关键决策已经确认"""
+
+        if is_near_end:
+            convergence_section += """
+注意：当前已是最后几轮，请优先评估是否满足收敛条件。"""
+
         prompt = f"""你是专家群聊主持人。你的任务是控制讨论流程，而不是替专家完成全部内容。
 
 本次任务目标：{goal}
@@ -200,14 +214,15 @@ class ContextBuilder:
 
 已有讨论摘要：
 {rolling_summary if rolling_summary else "这是讨论的开始。"}
+{convergence_section}
 
-你需要：
-1. 根据任务目标安排专家发言顺序
-2. 识别讨论中的冲突、遗漏和风险
-3. 在信息足够时推动结论收敛
-4. 如果是最后两轮，请明确要求专家总结核心观点
+## 输出格式要求
+你的回复必须以 ACTION 指令结尾，格式如下：
+- `ACTION: next:<专家名称>` — 让指定专家继续发言
+- `ACTION: converge` — 讨论已收敛，可以结束
+- `ACTION: synthesize` — 开始生成产出物
 
-请用简洁的主持词引导讨论，不要超过 200 字。"""
+请用简洁的主持词引导讨论（不超过 200 字），并在末尾输出 ACTION 指令。"""
 
         return prompt
 

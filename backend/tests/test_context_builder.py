@@ -161,6 +161,93 @@ def test_build_orchestrator_prompt():
     assert "设计登录模块" in prompt
 
 
+def test_orchestrator_prompt_contains_convergence_criteria():
+    """Test that orchestrator prompt contains convergence judgment criteria."""
+    # Arrange
+    builder = ContextBuilder()
+    experts = [{"name": "系统架构师"}, {"name": "产品经理"}]
+    
+    # Act
+    prompt = builder.build_orchestrator_prompt(
+        goal="设计登录模块",
+        shared_sources=[],
+        rolling_summary="",
+        current_round=3,
+        total_rounds=5,
+        experts=experts,
+    )
+    
+    # Assert - convergence criteria must be present
+    assert "收敛" in prompt
+    assert "观点" in prompt and "一致" in prompt
+    assert "新" in prompt and ("信息" in prompt or "观点" in prompt)
+    assert "决策" in prompt
+
+
+def test_orchestrator_prompt_contains_action_directives():
+    """Test that orchestrator prompt contains ACTION directive format."""
+    # Arrange
+    builder = ContextBuilder()
+    experts = [{"name": "系统架构师"}, {"name": "产品经理"}]
+    
+    # Act
+    prompt = builder.build_orchestrator_prompt(
+        goal="设计登录模块",
+        shared_sources=[],
+        rolling_summary="",
+        current_round=2,
+        total_rounds=5,
+        experts=experts,
+    )
+    
+    # Assert - ACTION directives must be present
+    assert "ACTION" in prompt
+    assert "next:" in prompt
+    assert "converge" in prompt
+    assert "synthesize" in prompt
+
+
+def test_orchestrator_prompt_near_end_round():
+    """Test orchestrator prompt indicates near-end rounds."""
+    # Arrange
+    builder = ContextBuilder()
+    experts = [{"name": "系统架构师"}, {"name": "产品经理"}]
+    
+    # Act - last round
+    prompt = builder.build_orchestrator_prompt(
+        goal="设计登录模块",
+        shared_sources=[],
+        rolling_summary="",
+        current_round=5,
+        total_rounds=5,
+        experts=experts,
+    )
+    
+    # Assert - should indicate this is the final round
+    assert "最后" in prompt or "收敛" in prompt
+
+
+def test_orchestrator_prompt_early_round():
+    """Test orchestrator prompt for early round does not force convergence."""
+    # Arrange
+    builder = ContextBuilder()
+    experts = [{"name": "系统架构师"}, {"name": "产品经理"}]
+    
+    # Act - first round
+    prompt = builder.build_orchestrator_prompt(
+        goal="设计登录模块",
+        shared_sources=[],
+        rolling_summary="",
+        current_round=1,
+        total_rounds=5,
+        experts=experts,
+    )
+    
+    # Assert - should still have ACTION directives but not force convergence
+    assert "ACTION" in prompt
+    assert "第 1/5" in prompt
+
+
 def test_build_synthesizer_prompt():
     """Test building synthesizer prompt."""
     # Arrange
