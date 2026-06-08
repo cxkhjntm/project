@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Security
     encryption_key: str = ""  # AES key for API key encryption
+    encrypt_api_keys: bool = False  # Whether to encrypt API keys at rest
 
     # LLM defaults
     default_max_tokens: int = 4096

@@ -1,7 +1,9 @@
 """Tests for provider service."""
 
 import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import AsyncSession
+from unittest.mock import patch
 
 from app.models.provider import Provider
 from app.schemas.provider import ProviderCreate, ProviderUpdate
@@ -41,9 +43,12 @@ class TestProviderService:
     async def test_create_provider_encrypts_key(
         self, provider_service: ProviderService, sample_provider_data: ProviderCreate
     ) -> None:
-        """Test that API key is encrypted on creation."""
-        # Verify encryption is called
-        from app.services.crypto import crypto_service
-        encrypted = crypto_service.encrypt("test-key")
-        assert encrypted != "test-key"
-        assert crypto_service.decrypt(encrypted) == "test-key"
+        """Test that API key is encrypted when encryption is enabled."""
+        from app.services.crypto import CryptoService
+        with patch("app.services.crypto.settings") as mock_settings:
+            mock_settings.encrypt_api_keys = True
+            mock_settings.encryption_key = Fernet.generate_key().decode()
+            svc = CryptoService()
+            encrypted = svc.encrypt("test-key")
+            assert encrypted != "test-key"
+            assert svc.decrypt(encrypted) == "test-key"

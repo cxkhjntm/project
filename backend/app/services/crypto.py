@@ -19,16 +19,14 @@ class CryptoService:
     """Service for encrypting and decrypting sensitive data."""
 
     def __init__(self, key_file: Path | None = None) -> None:
-        """Initialize crypto service with key from settings.
-
-        If ENCRYPTION_KEY is set in config, validate and use it directly.
-        If invalid or empty, fall back to key_file or generate a new key.
-
-        Args:
-            key_file: Path to persisted key file. Defaults to .encryption_key
-                      in the backend directory.
-        """
+        """Initialize crypto service with key from settings."""
         self._key_file = key_file or _KEY_FILE
+        self._enabled = settings.encrypt_api_keys
+
+        if not self._enabled:
+            self._fernet = None
+            logger.info("API key encryption disabled, storing plaintext")
+            return
 
         if settings.encryption_key:
             key_bytes = settings.encryption_key.encode()
@@ -91,41 +89,30 @@ class CryptoService:
         return key
 
     def encrypt(self, plaintext: str) -> str:
-        """Encrypt plaintext string.
-
-        Args:
-            plaintext: The string to encrypt
-
-        Returns:
-            Base64-encoded encrypted string
-        """
+        """Encrypt plaintext string."""
         if not plaintext:
             return ""
+
+        if not self._enabled:
+            return plaintext
 
         encrypted = self._fernet.encrypt(plaintext.encode())
         return encrypted.decode()
 
     def decrypt(self, ciphertext: str) -> str:
-        """Decrypt ciphertext string.
-
-        Args:
-            ciphertext: Base64-encoded encrypted string
-
-        Returns:
-            Decrypted plaintext string
-
-        Raises:
-            InvalidToken: If decryption fails (wrong key or corrupted data)
-        """
+        """Decrypt ciphertext string."""
         if not ciphertext:
             return ""
+
+        if not self._enabled:
+            return ciphertext
 
         try:
             decrypted = self._fernet.decrypt(ciphertext.encode())
             return decrypted.decode()
         except InvalidToken:
-            logger.error("Failed to decrypt data - invalid token")
-            raise
+            logger.warning("Decryption failed, returning plaintext (backward compat)")
+            return ciphertext
 
     def mask_key(self, api_key: str) -> str:
         """Mask API key for display purposes.

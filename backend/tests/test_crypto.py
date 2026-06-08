@@ -1,15 +1,19 @@
 """Tests for crypto service."""
 
 import pytest
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
+from unittest.mock import patch
 
 from app.services.crypto import CryptoService
 
 
 @pytest.fixture
 def crypto_service() -> CryptoService:
-    """Create crypto service with test key."""
-    return CryptoService()
+    """Create crypto service with encryption enabled for testing."""
+    with patch("app.services.crypto.settings") as mock_settings:
+        mock_settings.encrypt_api_keys = True
+        mock_settings.encryption_key = Fernet.generate_key().decode()
+        yield CryptoService()
 
 
 class TestCryptoService:
@@ -38,11 +42,11 @@ class TestCryptoService:
         # Fernet uses random IV, so ciphertext should be different
         assert encrypted1 != encrypted2
 
-    def test_decrypt_invalid_token_raises(self, crypto_service: CryptoService) -> None:
-        """Test that decrypting invalid data raises InvalidToken."""
-        from cryptography.fernet import InvalidToken
-        with pytest.raises(InvalidToken):
-            crypto_service.decrypt("invalid-encrypted-data")
+    def test_decrypt_invalid_token_returns_original(self, crypto_service: CryptoService) -> None:
+        """Test that decrypting invalid data returns original (backward compat)."""
+        invalid_data = "invalid-encrypted-data"
+        result = crypto_service.decrypt(invalid_data)
+        assert result == invalid_data
 
     def test_mask_key_long(self, crypto_service: CryptoService) -> None:
         """Test masking a long API key."""
@@ -58,3 +62,49 @@ class TestCryptoService:
     def test_mask_key_empty(self, crypto_service: CryptoService) -> None:
         """Test masking empty key."""
         assert crypto_service.mask_key("") == "***"
+
+
+class TestOptionalEncryption:
+    """Test optional encryption feature."""
+
+    def test_default_mode_returns_plaintext(self) -> None:
+        """Test that with encrypt_api_keys=False, encrypt returns plaintext."""
+        with patch("app.services.crypto.settings") as mock_settings:
+            mock_settings.encrypt_api_keys = False
+            mock_settings.encryption_key = ""
+            svc = CryptoService()
+            plaintext = "sk-test-api-key-12345"
+            result = svc.encrypt(plaintext)
+            assert result == plaintext
+
+    def test_default_mode_decrypt_returns_original(self) -> None:
+        """Test that with encrypt_api_keys=False, decrypt returns original."""
+        with patch("app.services.crypto.settings") as mock_settings:
+            mock_settings.encrypt_api_keys = False
+            mock_settings.encryption_key = ""
+            svc = CryptoService()
+            plaintext = "sk-test-api-key-12345"
+            result = svc.decrypt(plaintext)
+            assert result == plaintext
+
+    def test_enabled_encryption_encrypt_decrypt_roundtrip(self) -> None:
+        """Test that with encrypt_api_keys=True, encrypt/decrypt works."""
+        with patch("app.services.crypto.settings") as mock_settings:
+            mock_settings.encrypt_api_keys = True
+            mock_settings.encryption_key = Fernet.generate_key().decode()
+            svc = CryptoService()
+            plaintext = "sk-test-api-key-12345"
+            encrypted = svc.encrypt(plaintext)
+            assert encrypted != plaintext
+            decrypted = svc.decrypt(encrypted)
+            assert decrypted == plaintext
+
+    def test_backward_compat_plaintext_when_encryption_enabled(self) -> None:
+        """Test that decrypting plaintext works when encryption is enabled."""
+        with patch("app.services.crypto.settings") as mock_settings:
+            mock_settings.encrypt_api_keys = True
+            mock_settings.encryption_key = Fernet.generate_key().decode()
+            svc = CryptoService()
+            plaintext = "sk-test-api-key-12345"
+            result = svc.decrypt(plaintext)
+            assert result == plaintext
