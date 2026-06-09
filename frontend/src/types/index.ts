@@ -96,7 +96,7 @@ export interface RoleCardUpdate {
 // === Room ===
 
 export type RoomMode = 'code_document' | 'document' | 'code';
-export type RoomStatus = 'draft' | 'active' | 'completed' | 'error';
+export type RoomStatus = 'draft' | 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'stopped';
 
 export interface ParticipantInput {
   role_card_id: string;
@@ -169,7 +169,7 @@ export interface Citation {
 
 // === SharedSource ===
 
-export type SourceType = 'file' | 'folder' | 'text';
+export type SourceType = 'file' | 'folder' | 'text' | 'local_file';
 
 export interface SharedSource {
   id: string;

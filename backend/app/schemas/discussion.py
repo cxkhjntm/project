@@ -1,12 +1,11 @@
 """Discussion control schemas for request/response validation."""
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class DiscussionAction(str, Enum):
+class DiscussionAction(StrEnum):
     """Valid actions for discussion control."""
 
     START = "start"
@@ -19,7 +18,7 @@ class DiscussionControlRequest(BaseModel):
     """Schema for controlling a discussion."""
 
     action: DiscussionAction = Field(..., description="Action to perform on the discussion")
-    reason: Optional[str] = Field(None, description="Optional reason for the action")
+    reason: str | None = Field(None, description="Optional reason for the action")
 
 
 class DiscussionStatusResponse(BaseModel):

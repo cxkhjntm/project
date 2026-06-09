@@ -1,10 +1,9 @@
 """Tests for artifact writer service."""
 
 import os
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.artifact_writer import ArtifactWriter
@@ -20,7 +19,7 @@ def sample_messages():
             "sender_id": None,
             "content": "Welcome to the discussion. Today we will plan the new API.",
             "round": 1,
-            "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
         },
         {
             "id": "msg-2",
@@ -28,7 +27,7 @@ def sample_messages():
             "sender_id": "role-architect",
             "content": "I recommend using a RESTful design with FastAPI.",
             "round": 1,
-            "created_at": datetime(2025, 1, 1, 10, 1, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 1, 0, tzinfo=UTC),
         },
         {
             "id": "msg-3",
@@ -36,7 +35,7 @@ def sample_messages():
             "sender_id": "role-pm",
             "content": "We should focus on MVP scope first.",
             "round": 1,
-            "created_at": datetime(2025, 1, 1, 10, 2, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 2, 0, tzinfo=UTC),
         },
         {
             "id": "msg-4",
@@ -44,7 +43,7 @@ def sample_messages():
             "sender_id": None,
             "content": "Good points. Let's continue to the next round.",
             "round": 2,
-            "created_at": datetime(2025, 1, 1, 10, 3, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 3, 0, tzinfo=UTC),
         },
         {
             "id": "msg-5",
@@ -52,7 +51,7 @@ def sample_messages():
             "sender_id": "role-architect",
             "content": "For the database layer, I suggest SQLAlchemy with async support.",
             "round": 2,
-            "created_at": datetime(2025, 1, 1, 10, 4, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 4, 0, tzinfo=UTC),
         },
     ]
 
@@ -182,7 +181,7 @@ class TestGenerateArtifact:
 
         # Assert
         assert os.path.isfile(artifact.file_path)
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
         assert "Test Room" in content
         assert "Test goal" in content
@@ -190,7 +189,6 @@ class TestGenerateArtifact:
     async def test_saves_database_record(self, writer, sample_messages, output_dir, db_session):
         """Test that generate_artifact saves an Artifact record to the database."""
         from app.models.room import Room
-        from app.models.artifact import Artifact as ArtifactModel
 
         room = Room(
             id="room-2",
@@ -242,7 +240,9 @@ class TestGenerateArtifact:
         assert artifact.summary is not None
         assert len(artifact.summary) > 0
 
-    async def test_generates_unique_directory_per_run(self, writer, sample_messages, output_dir, db_session):
+    async def test_generates_unique_directory_per_run(
+        self, writer, sample_messages, output_dir, db_session
+    ):
         """Test that each artifact run creates a unique subdirectory."""
         from app.models.room import Room
 
@@ -278,7 +278,9 @@ class TestGenerateArtifact:
                 output_directory=output_dir,
             )
 
-    async def test_file_contains_structured_content(self, writer, sample_messages, output_dir, db_session):
+    async def test_file_contains_structured_content(
+        self, writer, sample_messages, output_dir, db_session
+    ):
         """Test that the generated file has proper Markdown structure."""
         from app.models.room import Room
 
@@ -299,13 +301,86 @@ class TestGenerateArtifact:
             output_directory=output_dir,
         )
 
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
 
         # Check Markdown structure
         assert "> 📋" in content  # Header annotation
         assert "## " in content  # Sections
         assert "---" in content  # Horizontal rules or metadata separators
+
+    async def test_file_contains_discussion_synthesis(
+        self, writer, sample_messages, output_dir, db_session
+    ):
+        """Test that generated content includes extracted conclusions from discussion messages."""
+        from app.models.room import Room
+
+        room = Room(
+            id="room-synthesis",
+            name="Synthesis Room",
+            goal="Synthesize real discussion content",
+            output_directory=output_dir,
+        )
+        db_session.add(room)
+        await db_session.flush()
+
+        artifact = await writer.generate_artifact(
+            room_id="room-synthesis",
+            room_name="Synthesis Room",
+            goal="Synthesize real discussion content",
+            messages=sample_messages,
+            output_directory=output_dir,
+        )
+
+        with open(artifact.file_path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "## 4. 总体方案" in content
+        assert "专家 (role-architect): I recommend using a RESTful design with FastAPI." in content
+        assert "专家 (role-pm): We should focus on MVP scope first." in content
+
+    async def test_repeated_generation_uses_unique_directories(
+        self, writer, sample_messages, output_dir, db_session
+    ):
+        """Test repeated artifact generation does not overwrite the same directory."""
+        from app.models.room import Room
+
+        room = Room(
+            id="room-repeat",
+            name="Repeat Room",
+            goal="Repeat generation",
+            output_directory=output_dir,
+        )
+        db_session.add(room)
+        await db_session.flush()
+
+        first = await writer.generate_artifact(
+            room_id="room-repeat",
+            room_name="Repeat Room",
+            goal="Repeat generation",
+            messages=sample_messages,
+            output_directory=output_dir,
+        )
+        second = await writer.generate_artifact(
+            room_id="room-repeat",
+            room_name="Repeat Room",
+            goal="Repeat generation",
+            messages=sample_messages,
+            output_directory=output_dir,
+        )
+
+        assert os.path.dirname(first.file_path) != os.path.dirname(second.file_path)
+
+    async def test_missing_output_directory_raises_error(self, writer, sample_messages):
+        """Test that artifact generation requires an output directory."""
+        with pytest.raises(ValueError, match="Output directory"):
+            await writer.generate_artifact(
+                room_id="room-no-output",
+                room_name="No Output Room",
+                goal="No output directory",
+                messages=sample_messages,
+                output_directory="",
+            )
 
 
 class TestArtifactWriterEdgeCases:
@@ -331,7 +406,7 @@ class TestArtifactWriterEdgeCases:
                 "sender_id": None,
                 "content": "This discussion has concluded.",
                 "round": 1,
-                "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+                "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
             }
         ]
 
@@ -346,7 +421,7 @@ class TestArtifactWriterEdgeCases:
         assert artifact is not None
         assert os.path.isfile(artifact.file_path)
 
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
         assert "This discussion has concluded" in content
 

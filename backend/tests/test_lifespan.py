@@ -2,7 +2,7 @@
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database import Base
 
@@ -14,9 +14,7 @@ async def test_lifespan_creates_tables():
     test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
     async with test_engine.connect() as conn:
-        result = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table'")
-        )
+        result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         tables = [row[0] for row in result]
         assert len(tables) == 0
 
@@ -24,9 +22,7 @@ async def test_lifespan_creates_tables():
         await conn.run_sync(Base.metadata.create_all)
 
     async with test_engine.connect() as conn:
-        result = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table'")
-        )
+        result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         tables = {row[0] for row in result}
 
     expected_tables = {
@@ -68,6 +64,7 @@ async def test_lifespan_loads_builtin_roles():
 
 def test_main_uses_lifespan():
     import inspect
+
     from app.main import create_app
 
     sig = inspect.signature(create_app)

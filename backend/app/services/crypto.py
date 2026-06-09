@@ -1,9 +1,7 @@
 """AES-256-GCM encryption service for API keys."""
 
-import base64
 import os
 from pathlib import Path
-from typing import Tuple
 
 from cryptography.fernet import Fernet, InvalidToken
 

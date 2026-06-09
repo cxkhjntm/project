@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import async_session_factory, init_db
 from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_handler
 from app.models import *  # noqa: F401, F403 - ensure all models registered with Base
-from app.routers import providers, role_cards, rooms, sources, discussion, artifacts, filesystem
+from app.routers import artifacts, discussion, filesystem, providers, role_cards, rooms, sources
 from app.seed.loader import load_builtin_roles
 from app.services.model_client import close_global_client
 from app.utils.logger import get_logger, setup_logging

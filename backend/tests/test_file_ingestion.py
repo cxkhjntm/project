@@ -1,20 +1,21 @@
 """Tests for file ingestion service."""
 
-import pytest
-from pathlib import Path
-import tempfile
 import os
+import tempfile
 import uuid
+from pathlib import Path
 
+import pytest
+
+from app.services.file_ingestion import FileIngestionService
 from app.utils.file_filter import (
     is_allowed_extension,
     is_excluded_directory,
     is_file_too_large,
-    scan_directory,
     read_file_content,
+    scan_directory,
 )
 from app.utils.path_validator import PathValidationError
-from app.services.file_ingestion import FileIngestionService
 
 
 class TestFileFilter:
@@ -57,7 +58,7 @@ class TestFileFilter:
             (Path(tmpdir) / "node_modules" / "dep.py").write_text("ignored")
 
             files = scan_directory(tmpdir)
-            
+
             paths = [f["relative_path"] for f in files]
             assert "test.py" in paths
             assert "test.md" in paths
@@ -66,7 +67,7 @@ class TestFileFilter:
 
     def test_read_file_content(self) -> None:
         """Test file content reading."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("Hello, World!")
             tmp_path = f.name
 
@@ -155,9 +156,7 @@ class TestIngestLocalFile:
             await service.ingest_local_file(db_session, room_id, traversal_path)
 
     @pytest.mark.asyncio
-    async def test_rejects_tilde_path(
-        self, service: FileIngestionService, db_session
-    ) -> None:
+    async def test_rejects_tilde_path(self, service: FileIngestionService, db_session) -> None:
         """Test that tilde expansion path is rejected."""
         room_id = str(uuid.uuid4())
 
@@ -199,3 +198,29 @@ class TestIngestLocalFile:
 
         source = await service.ingest_local_file(db_session, room_id, str(test_file))
         assert source is None
+
+
+class TestFolderSourceContent:
+    """Test folder source content snapshots."""
+
+    @pytest.fixture
+    def service(self) -> FileIngestionService:
+        return FileIngestionService()
+
+    @pytest.mark.asyncio
+    async def test_add_folder_source_includes_allowed_file_content(
+        self, service: FileIngestionService, db_session, tmp_path: Path
+    ) -> None:
+        """Test that folder source stores a bounded text snapshot for prompts."""
+        (tmp_path / "notes.md").write_text("# Notes\nUseful discussion context")
+        (tmp_path / "ignored.exe").write_bytes(b"\x00\x00")
+        room_id = str(uuid.uuid4())
+
+        source = await service.add_folder_source(db_session, room_id, str(tmp_path))
+
+        assert source is not None
+        assert source.source_type == "folder"
+        assert source.file_count == 1
+        assert "notes.md" in source.content
+        assert "Useful discussion context" in source.content
+        assert "ignored.exe" not in source.content

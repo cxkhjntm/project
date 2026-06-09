@@ -1,11 +1,11 @@
 """Path traversal protection utilities."""
 
-import os
 from pathlib import Path
 
 
 class PathValidationError(Exception):
     """Raised when path validation fails."""
+
     pass
 
 
@@ -31,9 +31,7 @@ def validate_path(path: str, base_directory: str) -> str:
     target = Path(path).resolve()
 
     if not target.is_relative_to(base):
-        raise PathValidationError(
-            f"Path traversal detected: '{path}' is outside base directory"
-        )
+        raise PathValidationError(f"Path traversal detected: '{path}' is outside base directory")
 
     return str(target)
 
@@ -73,15 +71,11 @@ def validate_output_directory(path: str) -> str:
     p = Path(path)
 
     # Reject relative paths: accept Unix absolute (/) and Windows absolute (C:\)
-    if not (p.is_absolute() or path.startswith('/')):
-        raise PathValidationError(
-            f"Output directory must be an absolute path, got: '{path}'"
-        )
+    if not (p.is_absolute() or path.startswith("/")):
+        raise PathValidationError(f"Output directory must be an absolute path, got: '{path}'")
 
-    if '..' in p.parts:
-        raise PathValidationError(
-            f"Path traversal detected in output directory: '{path}'"
-        )
+    if ".." in p.parts:
+        raise PathValidationError(f"Path traversal detected in output directory: '{path}'")
 
     return path
 
@@ -109,14 +103,10 @@ def validate_path_safety(file_path: str) -> str:
     p = Path(file_path)
 
     if file_path.strip().startswith("~"):
-        raise PathValidationError(
-            f"Tilde expansion not allowed: '{file_path}'"
-        )
+        raise PathValidationError(f"Tilde expansion not allowed: '{file_path}'")
 
     if ".." in p.parts:
-        raise PathValidationError(
-            f"Path traversal detected: '{file_path}' contains '..'"
-        )
+        raise PathValidationError(f"Path traversal detected: '{file_path}' contains '..'")
 
     resolved = p.resolve()
     return str(resolved)

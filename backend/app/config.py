@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # Security
-    encryption_key: str = ""  # AES key for API key encryption
-    encrypt_api_keys: bool = False  # Whether to encrypt API keys at rest
+    encryption_key: str = ""  # Fernet key for API key encryption
+    encrypt_api_keys: bool = True  # Whether to encrypt API keys at rest
 
     # LLM defaults
     default_max_tokens: int = 4096
@@ -38,12 +38,35 @@ class Settings(BaseSettings):
     # File processing
     max_file_size_mb: int = 10
     allowed_extensions: list[str] = [
-        ".txt", ".md", ".json", ".csv", ".py", ".ts", ".js", ".tsx", ".jsx",
-        ".html", ".css", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+        ".txt",
+        ".md",
+        ".json",
+        ".csv",
+        ".py",
+        ".ts",
+        ".js",
+        ".tsx",
+        ".jsx",
+        ".html",
+        ".css",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
     ]
     excluded_directories: list[str] = [
-        "node_modules", ".git", "dist", "build", ".next", ".venv",
-        "__pycache__", "target", "coverage", ".idea", ".vscode",
+        "node_modules",
+        ".git",
+        "dist",
+        "build",
+        ".next",
+        ".venv",
+        "__pycache__",
+        "target",
+        "coverage",
+        ".idea",
+        ".vscode",
     ]
 
 

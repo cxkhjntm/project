@@ -1,8 +1,5 @@
 """Test structured logging configuration."""
 
-import logging
-import structlog
-
 from app.utils.logger import get_logger, mask_sensitive_data, setup_logging
 
 

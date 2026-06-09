@@ -47,7 +47,7 @@ fn start_backend(app: &tauri::App) -> Result<(), String> {
 async fn check_backend_health() -> Result<bool, String> {
     let client = reqwest::Client::new();
     match client
-        .get("http://127.0.0.1:8000/health")
+        .get("http://127.0.0.1:8000/api/health")
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .await

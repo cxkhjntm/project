@@ -8,13 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.shared_source import SharedSource
 from app.utils.file_filter import (
-    read_file_content,
-    scan_directory,
     is_allowed_extension,
     is_file_too_large,
+    read_file_content,
+    scan_directory,
 )
 from app.utils.logger import get_logger
-from app.utils.path_validator import validate_path_safety, PathValidationError
+from app.utils.path_validator import validate_path_safety
 
 logger = get_logger(__name__)
 
@@ -106,18 +106,50 @@ class FileIngestionService:
             logger.error("Failed to scan folder", path=folder_path, error=str(e))
             return None
 
+        folder_content = self._build_folder_content(files)
+
         source = SharedSource(
             id=str(uuid.uuid4()),
             room_id=room_id,
             source_type="folder",
             path=folder_path,
+            content=folder_content,
             file_count=len(files),
         )
         session.add(source)
         await session.flush()
 
-        logger.info("Added folder source", source_id=source.id, path=folder_path, file_count=len(files))
+        logger.info(
+            "Added folder source", source_id=source.id, path=folder_path, file_count=len(files)
+        )
         return source
+
+    def _build_folder_content(self, files: list[dict]) -> str:
+        """Build a bounded text snapshot for a folder source."""
+        parts: list[str] = []
+        total_chars = 0
+
+        for file_info in files[:MAX_FILES_PER_FOLDER]:
+            if total_chars >= CONTENT_BUDGET_TOTAL:
+                break
+
+            remaining = CONTENT_BUDGET_TOTAL - total_chars
+            per_file_limit = min(CONTENT_BUDGET_PER_FOLDER_FILE, remaining)
+            content = read_file_content(file_info["path"], max_chars=per_file_limit)
+            if not content:
+                continue
+
+            header = f"\n{'=' * 60}\nFILE: {file_info['relative_path']}\n{'=' * 60}\n"
+            section = header + content
+            parts.append(section)
+            total_chars += len(section)
+
+        if len(files) > MAX_FILES_PER_FOLDER:
+            parts.append(
+                f"\n... [only first {MAX_FILES_PER_FOLDER} of {len(files)} files included]"
+            )
+
+        return "\n".join(parts)
 
     async def add_text_source(
         self,
@@ -203,9 +235,7 @@ class FileIngestionService:
         logger.info("Ingested local file", source_id=source.id, path=safe_path)
         return source
 
-    async def get_room_sources(
-        self, session: AsyncSession, room_id: str
-    ) -> list[SharedSource]:
+    async def get_room_sources(self, session: AsyncSession, room_id: str) -> list[SharedSource]:
         """Get all sources for a room.
 
         Args:
@@ -222,9 +252,7 @@ class FileIngestionService:
         )
         return list(result.scalars().all())
 
-    async def delete_source(
-        self, session: AsyncSession, source_id: str
-    ) -> bool:
+    async def delete_source(self, session: AsyncSession, source_id: str) -> bool:
         """Delete a shared source.
 
         Args:
@@ -234,9 +262,7 @@ class FileIngestionService:
         Returns:
             True if deleted, False if not found
         """
-        result = await session.execute(
-            select(SharedSource).where(SharedSource.id == source_id)
-        )
+        result = await session.execute(select(SharedSource).where(SharedSource.id == source_id))
         source = result.scalar_one_or_none()
         if not source:
             return False
@@ -270,22 +296,33 @@ class FileIngestionService:
                 parts.append("\n... [content budget exhausted]")
                 break
 
-            if source.source_type == "file" and source.path:
-                content = read_file_content(source.path, max_chars=CONTENT_BUDGET_PER_FILE)
+            if source.source_type in ("file", "local_file") and source.path:
+                content = source.content or read_file_content(
+                    source.path, max_chars=CONTENT_BUDGET_PER_FILE
+                )
                 if content:
-                    header = f"\n{'='*60}\nFILE: {source.content or source.path}\n{'='*60}\n"
+                    header = f"\n{'=' * 60}\nFILE: {source.path}\n{'=' * 60}\n"
                     parts.append(header + content)
                     total_chars += len(content)
 
             elif source.source_type == "folder" and source.path:
+                if source.content:
+                    remaining = CONTENT_BUDGET_TOTAL - total_chars
+                    content = source.content[:remaining]
+                    parts.append(content)
+                    total_chars += len(content)
+                    continue
+
                 try:
                     files = scan_directory(source.path)
                     for f in files[:MAX_FILES_PER_FOLDER]:
                         if total_chars >= CONTENT_BUDGET_TOTAL:
                             break
-                        content = read_file_content(f["path"], max_chars=CONTENT_BUDGET_PER_FOLDER_FILE)
+                        content = read_file_content(
+                            f["path"], max_chars=CONTENT_BUDGET_PER_FOLDER_FILE
+                        )
                         if content:
-                            header = f"\n{'='*60}\nFILE: {f['relative_path']}\n{'='*60}\n"
+                            header = f"\n{'=' * 60}\nFILE: {f['relative_path']}\n{'=' * 60}\n"
                             parts.append(header + content)
                             total_chars += len(content)
                 except Exception as e:
@@ -294,7 +331,7 @@ class FileIngestionService:
             elif source.source_type == "text" and source.content:
                 remaining = CONTENT_BUDGET_TOTAL - total_chars
                 text = source.content[:remaining]
-                parts.append(f"\n{'='*60}\nPASTED TEXT\n{'='*60}\n{text}")
+                parts.append(f"\n{'=' * 60}\nPASTED TEXT\n{'=' * 60}\n{text}")
                 total_chars += len(text)
 
         return "\n".join(parts)

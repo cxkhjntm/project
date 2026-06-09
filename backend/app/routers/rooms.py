@@ -1,7 +1,5 @@
 """Room API endpoints."""
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,10 +31,10 @@ async def create_room(
     return RoomResponse.model_validate(room)
 
 
-@router.get("", response_model=List[RoomListItem])
+@router.get("", response_model=list[RoomListItem])
 async def list_rooms(
     session: AsyncSession = Depends(get_session),
-) -> List[RoomListItem]:
+) -> list[RoomListItem]:
     """List all rooms."""
     rooms = await room_service.get_all(session)
     return [RoomListItem.model_validate(r) for r in rooms]

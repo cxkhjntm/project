@@ -31,6 +31,8 @@ const modeLabels: Record<string, { label: string; color: string }> = {
   code: { label: '代码', color: 'bg-purple-100 text-purple-700' },
 };
 
+const startableStatuses = new Set(['draft', 'idle', 'completed', 'stopped']);
+
 export default function DiscussionPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -229,7 +231,7 @@ export default function DiscussionPage() {
   const isDiscussionActive = status === 'running' || status === 'connecting';
   const canSendMessages = isDiscussionActive && !isComplete;
   const currentRoomStatus = controlStatus?.status || roomData?.status || 'draft';
-  const showStartButton = currentRoomStatus === 'draft' || currentRoomStatus === 'idle' || currentRoomStatus === 'completed';
+  const showStartButton = startableStatuses.has(currentRoomStatus);
   const showPauseButton = currentRoomStatus === 'running' && controlStatus?.can_pause;
   const showResumeButton = currentRoomStatus === 'paused' && controlStatus?.can_resume;
   const showStopButton = (currentRoomStatus === 'running' || currentRoomStatus === 'paused') && controlStatus?.can_stop;
@@ -271,12 +273,14 @@ export default function DiscussionPage() {
               className={`text-xs px-2 py-1 rounded-full ${
                 status === 'running' ? 'bg-green-100 text-green-700' :
                 status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                status === 'stopped' ? 'bg-yellow-100 text-yellow-700' :
                 status === 'failed' ? 'bg-red-100 text-red-700' :
                 'bg-blue-100 text-blue-700'
               }`}
             >
               {status === 'running' ? '🟢 进行中' :
                status === 'completed' ? '✅ 已完成' :
+               status === 'stopped' ? '⏹ 已停止' :
                status === 'failed' ? '❌ 失败' :
                status === 'idle' ? '⚪ 待开始' : '⏳ 连接中'}
             </span>

@@ -1,8 +1,6 @@
 """Message service for CRUD operations."""
 
-from typing import List, Optional
-
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.message import Message
@@ -49,9 +47,9 @@ class MessageService:
         self,
         session: AsyncSession,
         room_id: str,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[Message]:
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[Message]:
         """Get messages by room ID."""
         query = (
             select(Message)
@@ -67,32 +65,37 @@ class MessageService:
         result = await session.execute(query)
         return list(result.scalars().all())
 
-    async def get_by_id(
-        self, session: AsyncSession, message_id: str
-    ) -> Optional[Message]:
+    async def get_by_id(self, session: AsyncSession, message_id: str) -> Message | None:
         """Get message by ID."""
-        result = await session.execute(
-            select(Message).where(Message.id == message_id)
-        )
+        result = await session.execute(select(Message).where(Message.id == message_id))
         return result.scalar_one_or_none()
 
-    async def get_latest_round(
-        self, session: AsyncSession, room_id: str
-    ) -> int:
+    async def get_latest_round(self, session: AsyncSession, room_id: str) -> int:
         """Get the latest round number for a room."""
         result = await session.execute(
-            select(func.max(Message.round))
-            .where(Message.room_id == room_id)
+            select(func.max(Message.round)).where(Message.room_id == room_id)
         )
         max_round = result.scalar_one_or_none()
         return max_round or 0
 
+    async def get_by_room_round(
+        self,
+        session: AsyncSession,
+        room_id: str,
+        round_number: int,
+    ) -> list[Message]:
+        """Get messages for a room in a specific round."""
+        result = await session.execute(
+            select(Message)
+            .where(Message.room_id == room_id, Message.round == round_number)
+            .order_by(Message.created_at.asc())
+        )
+        return list(result.scalars().all())
+
     async def count_by_room(self, session: AsyncSession, room_id: str) -> int:
         """Count messages in a room."""
         result = await session.execute(
-            select(func.count())
-            .select_from(Message)
-            .where(Message.room_id == room_id)
+            select(func.count()).select_from(Message).where(Message.room_id == room_id)
         )
         return result.scalar_one()
 

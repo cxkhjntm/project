@@ -1,10 +1,11 @@
 """Artifact writer service for generating structured outputs in multiple formats."""
 
 import os
+import re
 import uuid
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,8 +16,9 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class ArtifactFormat(str, Enum):
+class ArtifactFormat(StrEnum):
     """产出格式枚举"""
+
     MARKDOWN = "markdown"
     TEXT = "text"
     CODE = "code"
@@ -34,6 +36,74 @@ MODE_DISPLAY_NAMES = {
     ArtifactFormat.CODE: "代码模式",
 }
 
+CONCLUSION_KEYWORDS = (
+    "建议",
+    "推荐",
+    "结论",
+    "认为",
+    "应该",
+    "优先",
+    "采用",
+    "选择",
+    "方案",
+    "recommend",
+    "suggest",
+    "should",
+    "priority",
+    "prioritize",
+    "use",
+    "adopt",
+)
+
+RISK_KEYWORDS = (
+    "风险",
+    "问题",
+    "限制",
+    "瓶颈",
+    "成本",
+    "依赖",
+    "冲突",
+    "安全",
+    "失败",
+    "不确定",
+    "注意",
+    "risk",
+    "issue",
+    "limitation",
+    "concern",
+    "cost",
+    "dependency",
+    "security",
+    "failure",
+    "trade-off",
+    "tradeoff",
+)
+
+ACTION_KEYWORDS = (
+    "下一步",
+    "实施",
+    "落地",
+    "执行",
+    "验证",
+    "测试",
+    "接入",
+    "配置",
+    "创建",
+    "补充",
+    "完善",
+    "需要",
+    "先",
+    "todo",
+    "action",
+    "next",
+    "implement",
+    "validate",
+    "test",
+    "build",
+    "create",
+    "configure",
+)
+
 
 class ArtifactWriterError(Exception):
     pass
@@ -48,18 +118,21 @@ class ArtifactWriter:
         room_id: str,
         room_name: str,
         goal: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         output_directory: str,
         mode: str = "code_document",
-        participants: Optional[List[str]] = None,
+        participants: list[str] | None = None,
         source_count: int = 0,
         model_name: str = "unknown",
     ) -> Artifact:
         if not messages:
             raise ValueError("No messages provided for artifact generation")
+        if not output_directory:
+            raise ValueError("Output directory is required for artifact generation")
 
         artifact_format = MODE_FORMAT_MAP.get(mode, ArtifactFormat.MARKDOWN)
         discussion_text = self._build_discussion_text(messages)
+        synthesis = self._synthesize_discussion(messages)
 
         round_count = max(m.get("round", 0) for m in messages)
         header = self._build_source_annotation(
@@ -67,23 +140,25 @@ class ArtifactWriter:
         )
 
         if artifact_format == ArtifactFormat.MARKDOWN:
-            part1_content = self._generate_part1(goal, discussion_text)
+            part1_content = self._generate_part1(goal, discussion_text, synthesis)
             part1_summary = self._extract_part1_summary(part1_content)
-            part2_content = self._generate_part2(goal, discussion_text, part1_summary)
+            part2_content = self._generate_part2(goal, discussion_text, part1_summary, synthesis)
             content = header + part1_content + "\n\n" + part2_content
             file_name = "final-plan.md"
             artifact_type = "markdown"
         elif artifact_format == ArtifactFormat.TEXT:
-            content = header + self._generate_text(goal, discussion_text)
+            content = header + self._generate_text(goal, discussion_text, synthesis)
             file_name = "final-report.txt"
             artifact_type = "text"
         else:
-            content = header + self._generate_code(goal, discussion_text)
+            content = header + self._generate_code(goal, discussion_text, synthesis)
             file_name = "code-draft.md"
             artifact_type = "markdown"
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        artifact_dir = os.path.join(output_directory, f"artifact_{timestamp}")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        artifact_dir = os.path.join(
+            output_directory, f"artifact_{timestamp}_{uuid.uuid4().hex[:8]}"
+        )
 
         try:
             os.makedirs(artifact_dir, exist_ok=True)
@@ -112,95 +187,159 @@ class ArtifactWriter:
         self.session.add(artifact)
         await self.session.flush()
 
-        logger.info("Generated artifact", artifact_id=artifact.id, room_id=room_id, file_path=file_path, mode=mode)
+        logger.info(
+            "Generated artifact",
+            artifact_id=artifact.id,
+            room_id=room_id,
+            file_path=file_path,
+            mode=mode,
+        )
         return artifact
 
-    def _generate_part1(self, goal: str, discussion: str) -> str:
+    def _generate_part1(
+        self,
+        goal: str,
+        discussion: str,
+        synthesis: dict[str, list[str]],
+    ) -> str:
+        observations = self._format_bullets(
+            synthesis["observations"], "讨论记录中暂无可抽取的资料理解。"
+        )
+        requirements = self._format_bullets(
+            synthesis["requirements"],
+            "讨论记录中暂无明确需求拆解，建议在下一轮补充边界、输入输出和验收条件。",
+        )
+        conclusions = self._format_bullets(synthesis["conclusions"], "讨论记录中暂无明确总体方案。")
+        implementation = self._format_bullets(
+            synthesis["implementation"],
+            "讨论记录中暂无明确模块设计，建议按核心流程、数据模型、接口和持久化拆分。",
+        )
+
         return f"""# {goal}
 
 ## 1. 背景与目标
-基于讨论记录生成的背景与目标分析。
+本产出基于专家讨论记录自动整理，目标是形成可执行、可复核的方案文档。
+
+目标：{goal}
 
 ## 2. 当前资料理解
-对共享资料的理解和分析。
+{observations}
 
 ## 3. 需求拆解
-功能需求的详细拆解。
+{requirements}
 
 ## 4. 总体方案
-整体技术方案设计。
+{conclusions}
 
 ## 5. 模块设计
-系统模块划分和设计。
+{implementation}
 
 ### 讨论记录摘要
 {discussion[:2000]}"""
 
-    def _generate_part2(self, goal: str, discussion: str, part1_summary: str) -> str:
+    def _generate_part2(
+        self,
+        goal: str,
+        discussion: str,
+        part1_summary: str,
+        synthesis: dict[str, list[str]],
+    ) -> str:
+        interfaces = self._format_bullets(
+            synthesis["interfaces"], "讨论记录中暂无明确接口或数据结构设计。"
+        )
+        actions = self._format_numbered(
+            synthesis["actions"], "1. 将核心结论转化为任务清单，并补齐负责人、顺序和验收标准。"
+        )
+        tests = self._format_bullets(
+            synthesis["tests"],
+            "讨论记录中暂无明确测试项，建议至少覆盖核心流程、异常输入、权限/路径安全和产出文件验证。",
+        )
+        risks = self._format_bullets(synthesis["risks"], "讨论记录中暂无明确风险项。")
+        next_steps = self._format_bullets(
+            synthesis["next_steps"], "讨论记录中暂无明确后续迭代建议。"
+        )
+
         return f"""## 6. 数据结构 / 接口设计
-API接口和数据结构设计。
+{interfaces}
 
 ## 7. 实施步骤
-详细的实施步骤和时间线。
+{actions}
 
 ## 8. 测试与验收标准
-测试方案和验收标准。
+{tests}
 
 ## 9. 风险与取舍
-技术风险分析和权衡取舍。
+{risks}
 
 ## 10. 后续迭代建议
-后续版本的改进建议。"""
+{next_steps}"""
 
-    def _generate_text(self, goal: str, discussion: str) -> str:
+    def _generate_text(
+        self,
+        goal: str,
+        discussion: str,
+        synthesis: dict[str, list[str]],
+    ) -> str:
         return f"""{goal}
-{'='*60}
+{"=" * 60}
 
 执行摘要
 --------
-基于专家讨论的核心结论和建议。
+{self._format_plain_lines(synthesis["conclusions"], "讨论记录中暂无明确结论。")}
 
 背景与目标
 ----------
-讨论的背景和要达成的目标。
+{goal}
 
 现状分析
 --------
-对当前情况的分析和理解。
+{self._format_plain_lines(synthesis["observations"], "讨论记录中暂无明确现状分析。")}
 
 核心发现
 --------
-讨论中的关键发现和洞察。
+{self._format_plain_lines(synthesis["requirements"], "讨论记录中暂无明确核心发现。")}
 
 结论与建议
 ----------
-最终结论和可执行的建议。
+{self._format_plain_lines(synthesis["actions"], "讨论记录中暂无明确行动建议。")}
 
 数据来源说明
 ----------
-讨论中引用的数据和资料来源。
+本报告根据讨论消息自动整理，完整逐轮内容见同目录 discussion-log.md。
 
 附录
 ----
-补充信息和参考资料。"""
+风险与注意事项：
+{self._format_plain_lines(synthesis["risks"], "讨论记录中暂无明确风险项。")}"""
 
-    def _generate_code(self, goal: str, discussion: str) -> str:
+    def _generate_code(
+        self,
+        goal: str,
+        discussion: str,
+        synthesis: dict[str, list[str]],
+    ) -> str:
+        todo_lines = synthesis["actions"] or synthesis["implementation"] or synthesis["conclusions"]
+        todo_block = (
+            "\n".join(f"- {item}" for item in todo_lines[:8]) or "- 根据讨论结论补充核心实现任务。"
+        )
         return f"""# {goal}
 
 ## 实现概述
-核心功能的实现思路和架构设计。
+{self._format_bullets(synthesis["conclusions"], "讨论记录中暂无明确实现结论。")}
 
-## 核心代码
+## 核心任务草案
+{self._format_bullets(todo_lines, "根据讨论结论补充核心实现任务。")}
+
+## 伪代码骨架
 
 ```python
-# 核心功能实现示例
-# 请根据讨论结果填充具体代码
+# Generated implementation notes from expert discussion.
+TODO_ITEMS = \"\"\"
+{todo_block}
+\"\"\"
 
 def main():
-    \"\"\"
-    主函数 - 核心逻辑实现
-    基于专家讨论的方案
-    \"\"\"
+    \"\"\"Wire the agreed implementation tasks into concrete modules.\"\"\"
     pass
 
 if __name__ == "__main__":
@@ -217,35 +356,196 @@ python main.py
 ```
 
 ## 依赖说明
-- Python 3.8+
-- 其他依赖项
+{self._format_bullets(synthesis["interfaces"], "讨论记录中暂无明确依赖或接口说明。")}
 
 ## 集成方式
-如何将此代码集成到现有项目中。
+{self._format_bullets(synthesis["implementation"], "讨论记录中暂无明确集成方式。")}
 
 ## 注意事项
-- 使用前请先阅读说明
-- 注意配置参数
+{self._format_bullets(synthesis["risks"], "讨论记录中暂无明确注意事项。")}
 
 ## 测试建议
-建议的测试方案和测试用例。"""
+{self._format_bullets(synthesis["tests"], "讨论记录中暂无明确测试建议。")}"""
+
+    def _synthesize_discussion(self, messages: list[dict[str, Any]]) -> dict[str, list[str]]:
+        """Extract deterministic synthesis points from discussion messages."""
+        all_items: list[str] = []
+        expert_items: list[str] = []
+
+        for msg in messages:
+            sender_type = msg.get("sender_type", "unknown")
+            sender_id = msg.get("sender_id")
+            sender_label = get_sender_label(sender_type, sender_id)
+            for item in self._extract_message_items(str(msg.get("content", ""))):
+                labeled_item = f"{sender_label}: {item}"
+                all_items.append(labeled_item)
+                if sender_type == "expert":
+                    expert_items.append(labeled_item)
+
+        primary_items = expert_items or all_items
+        conclusions = self._select_items(primary_items, CONCLUSION_KEYWORDS, limit=6)
+        if not conclusions:
+            conclusions = self._fallback_items(primary_items, limit=4)
+
+        requirements = self._select_items(
+            primary_items,
+            ("需求", "目标", "范围", "边界", "功能", "MVP", "requirement", "scope", "goal"),
+            limit=5,
+        )
+        implementation = self._select_items(
+            primary_items,
+            (
+                "实现",
+                "架构",
+                "模块",
+                "流程",
+                "数据库",
+                "接口",
+                "集成",
+                "服务",
+                "状态",
+                "implementation",
+                "architecture",
+                "module",
+                "database",
+                "service",
+                "workflow",
+            ),
+            limit=6,
+        )
+        interfaces = self._select_items(
+            primary_items,
+            (
+                "接口",
+                "API",
+                "数据",
+                "表",
+                "模型",
+                "schema",
+                "REST",
+                "FastAPI",
+                "SQLAlchemy",
+                "database",
+                "endpoint",
+                "contract",
+            ),
+            limit=5,
+        )
+        risks = self._select_items(primary_items, RISK_KEYWORDS, limit=5)
+        actions = self._select_items(primary_items, ACTION_KEYWORDS, limit=6)
+        tests = self._select_items(
+            primary_items,
+            ("测试", "验收", "验证", "覆盖", "用例", "test", "validate", "acceptance", "coverage"),
+            limit=5,
+        )
+        next_steps = self._select_items(
+            primary_items,
+            ("后续", "迭代", "下一步", "补充", "完善", "phase", "next", "follow-up", "future"),
+            limit=5,
+        )
+
+        return {
+            "observations": self._fallback_items(primary_items, limit=4),
+            "requirements": requirements,
+            "conclusions": conclusions,
+            "implementation": implementation,
+            "interfaces": interfaces,
+            "risks": risks,
+            "actions": actions,
+            "tests": tests,
+            "next_steps": next_steps,
+        }
+
+    def _extract_message_items(self, content: str) -> list[str]:
+        items: list[str] = []
+        in_code_block = False
+        for raw_line in content.replace("\r\n", "\n").split("\n"):
+            line = raw_line.strip()
+            if line.startswith("```"):
+                in_code_block = not in_code_block
+                continue
+            if in_code_block:
+                continue
+
+            line = self._clean_item(line)
+            if not line:
+                continue
+
+            for part in re.split(r"(?<=[。！？!?；;])\s*|(?<=[.!?])\s+", line):
+                item = self._clean_item(part)
+                if 8 <= len(item) <= 240:
+                    items.append(item[:180])
+
+        return self._dedupe(items)
+
+    def _clean_item(self, text: str) -> str:
+        text = re.sub(r"ACTION:\s*\S+", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"LENGTH_WARNING:\s*\w+", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"^#{1,6}\s*", "", text)
+        text = re.sub(r"^[-*+]\s+", "", text)
+        text = re.sub(r"^\d+[.)、]\s*", "", text)
+        text = text.replace("**", "").replace("__", "").replace("`", "")
+        return re.sub(r"\s+", " ", text).strip(" -:：\t")
+
+    def _select_items(
+        self,
+        items: list[str],
+        keywords: tuple[str, ...],
+        limit: int,
+    ) -> list[str]:
+        selected = []
+        lowered_keywords = tuple(k.lower() for k in keywords)
+        for item in items:
+            searchable = item.lower()
+            if any(keyword in searchable for keyword in lowered_keywords):
+                selected.append(item)
+        return self._dedupe(selected)[:limit]
+
+    def _fallback_items(self, items: list[str], limit: int) -> list[str]:
+        return self._dedupe(items)[:limit]
+
+    def _dedupe(self, items: list[str]) -> list[str]:
+        seen = set()
+        unique_items = []
+        for item in items:
+            key = item.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_items.append(item)
+        return unique_items
+
+    def _format_bullets(self, items: list[str], empty_text: str) -> str:
+        if not items:
+            return f"- {empty_text}"
+        return "\n".join(f"- {item}" for item in items)
+
+    def _format_numbered(self, items: list[str], empty_text: str) -> str:
+        if not items:
+            return empty_text
+        return "\n".join(f"{index}. {item}" for index, item in enumerate(items, start=1))
+
+    def _format_plain_lines(self, items: list[str], empty_text: str) -> str:
+        if not items:
+            return empty_text
+        return "\n".join(f"- {item}" for item in items)
 
     def _extract_part1_summary(self, part1_content: str) -> str:
-        lines = part1_content.split('\n')
+        lines = part1_content.split("\n")
         summary_parts = []
         for line in lines:
-            if line.startswith('#'):
+            if line.startswith("#"):
                 summary_parts.append(line)
-            elif line.strip() and summary_parts and not summary_parts[-1].startswith('#'):
+            elif line.strip() and summary_parts and not summary_parts[-1].startswith("#"):
                 continue
             elif line.strip() and summary_parts:
                 summary_parts.append(line[:100])
-        return '\n'.join(summary_parts[:20])
+        return "\n".join(summary_parts[:20])
 
     def _build_source_annotation(
         self,
         room_name: str,
-        participants: List[str],
+        participants: list[str],
         source_count: int,
         model_name: str,
         round_count: int,
@@ -253,7 +553,7 @@ python main.py
     ) -> str:
         participant_str = "、".join(participants) if participants else "未知"
         mode_name = MODE_DISPLAY_NAMES.get(artifact_format, "未知模式")
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
         return f"""> 📋 本方案由专家团通过 {round_count} 轮多专家讨论自动生成。
 > 讨论室：{room_name}
 > 讨论模式：{mode_name}
@@ -266,7 +566,7 @@ python main.py
 
 """
 
-    def _build_discussion_text(self, messages: List[Dict[str, Any]]) -> str:
+    def _build_discussion_text(self, messages: list[dict[str, Any]]) -> str:
         parts = []
         current_round = 0
         for msg in messages:
@@ -281,13 +581,17 @@ python main.py
             parts.append(f"**{label}**：{content}\n")
         return "\n".join(parts)
 
-    def _build_markdown_content(self, room_name: str, goal: str, messages: List[Dict[str, Any]]) -> str:
-        return build_discussion_markdown(room_name=room_name, goal=goal, messages=messages, include_summary=False)
+    def _build_markdown_content(
+        self, room_name: str, goal: str, messages: list[dict[str, Any]]
+    ) -> str:
+        return build_discussion_markdown(
+            room_name=room_name, goal=goal, messages=messages, include_summary=False
+        )
 
-    def _get_sender_label(self, sender_type: str, sender_id: Optional[str]) -> str:
+    def _get_sender_label(self, sender_type: str, sender_id: str | None) -> str:
         return get_sender_label(sender_type, sender_id)
 
-    def _build_summary(self, messages: List[Dict[str, Any]]) -> str:
+    def _build_summary(self, messages: list[dict[str, Any]]) -> str:
         return build_summary(messages)
 
 

@@ -1,18 +1,16 @@
 """File filtering and validation utilities."""
 
-import os
 from pathlib import Path
-from typing import List, Optional
 
 from app.config import settings
 
 
 def is_allowed_extension(filename: str) -> bool:
     """Check if file extension is allowed.
-    
+
     Args:
         filename: File name or path
-        
+
     Returns:
         True if extension is allowed
     """
@@ -22,10 +20,10 @@ def is_allowed_extension(filename: str) -> bool:
 
 def is_excluded_directory(dir_name: str) -> bool:
     """Check if directory should be excluded.
-    
+
     Args:
         dir_name: Directory name
-        
+
     Returns:
         True if directory should be excluded
     """
@@ -34,10 +32,10 @@ def is_excluded_directory(dir_name: str) -> bool:
 
 def is_file_too_large(file_size: int) -> bool:
     """Check if file exceeds size limit.
-    
+
     Args:
         file_size: File size in bytes
-        
+
     Returns:
         True if file is too large
     """
@@ -49,17 +47,17 @@ def scan_directory(
     directory: str,
     recursive: bool = True,
     max_files: int = 1000,
-) -> List[dict]:
+) -> list[dict]:
     """Scan directory for allowed text files.
-    
+
     Args:
         directory: Directory path to scan
         recursive: Whether to scan subdirectories
         max_files: Maximum number of files to return
-        
+
     Returns:
         List of dicts with 'path', 'relative_path', 'size', 'extension'
-        
+
     Raises:
         FileNotFoundError: If directory doesn't exist
         PermissionError: If directory is not readable
@@ -71,7 +69,7 @@ def scan_directory(
         raise ValueError(f"Not a directory: {directory}")
 
     files = []
-    
+
     if recursive:
         walker = dir_path.rglob("*")
     else:
@@ -107,23 +105,25 @@ def scan_directory(
         if is_file_too_large(size):
             continue
 
-        files.append({
-            "path": str(item),
-            "relative_path": str(relative),
-            "size": size,
-            "extension": item.suffix.lower(),
-        })
+        files.append(
+            {
+                "path": str(item),
+                "relative_path": str(relative),
+                "size": size,
+                "extension": item.suffix.lower(),
+            }
+        )
 
     return files
 
 
-def read_file_content(file_path: str, max_chars: int = 100_000) -> Optional[str]:
+def read_file_content(file_path: str, max_chars: int = 100_000) -> str | None:
     """Read file content with encoding detection.
-    
+
     Args:
         file_path: Path to file
         max_chars: Maximum characters to read
-        
+
     Returns:
         File content string, or None if unreadable
     """

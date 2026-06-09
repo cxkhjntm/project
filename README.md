@@ -26,12 +26,12 @@
 
 | 层级 | 技术选型 |
 |------|----------|
-| **后端** | Python 3.11+ / FastAPI / SQLAlchemy / SQLite |
+| **后端** | Python 3.12+ / FastAPI / SQLAlchemy / SQLite |
 | **前端** | React 18 / TypeScript 5.6 / Vite 5.4 |
 | **状态管理** | Zustand 5.0 / React Hook Form 7.53 / Zod 3.23 |
 | **样式** | Tailwind CSS 3.4 |
 | **实时通信** | SSE (Server-Sent Events) |
-| **安全** | Fernet 加密（AES-256-GCM） |
+| **安全** | Fernet 加密存储 API Key |
 | **数据库** | SQLite + aiosqlite (异步驱动) |
 | **ORM** | SQLAlchemy 2.0 + Alembic (迁移) |
 | **日志** | structlog |
@@ -40,7 +40,7 @@
 
 ### 环境要求
 
-- Python 3.11+
+- Python 3.12+
 - Node.js 18+
 - npm 或 pnpm
 
@@ -84,7 +84,7 @@ pip install -r requirements.txt
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 设置 ENCRYPTION_KEY（用于加密 API 密钥）
+# 编辑 .env 设置 ENCRYPT_API_KEYS 和 ENCRYPTION_KEY（用于加密 API 密钥）
 
 # 生成加密密钥
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -128,6 +128,7 @@ DATABASE_URL=sqlite+aiosqlite:///./expert_room.db
 CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
 
 # 安全 - 用于加密 API 密钥（Fernet 格式，32 字节 Base64 编码）
+ENCRYPT_API_KEYS=true
 ENCRYPTION_KEY=your-generated-key-here
 
 # LLM 默认参数
@@ -171,7 +172,7 @@ project/
 │   │   │   ├── orchestrator.py    # 讨论编排器（状态机）
 │   │   │   ├── model_client.py    # LLM 调用客户端
 │   │   │   ├── context_builder.py # 上下文构建
-│   │   │   ├── crypto.py          # AES 加密服务
+│   │   │   ├── crypto.py          # API Key 加密服务
 │   │   │   ├── artifact_writer.py # 产物生成
 │   │   │   └── file_ingestion.py  # 文件处理
 │   │   └── utils/             # 工具函数
@@ -255,8 +256,9 @@ project/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/rooms/{id}/start` | 启动讨论（返回 SSE 流） |
+| `GET` | `/api/rooms/{id}/start` | 启动讨论（返回 SSE 流） |
 | `GET` | `/api/rooms/{id}/messages` | 获取消息列表 |
+| `POST` | `/api/rooms/{id}/messages` | 发送用户插话消息 |
 | `GET` | `/api/rooms/{id}/messages/stream` | SSE 消息流 |
 
 #### 产物管理
@@ -289,10 +291,11 @@ project/
 
 ### API 密钥加密
 
-所有 LLM Provider 的 API 密钥使用 Fernet（AES-256-GCM）加密存储：
+所有 LLM Provider 的 API 密钥默认使用 Fernet 加密存储：
 
 - 密钥在写入数据库前加密
 - 读取时解密，传输到前端时掩码显示（如 `sk-abc12345***`）
+- `ENCRYPT_API_KEYS=true` 时启用加密，默认启用
 - 加密密钥优先从环境变量 `ENCRYPTION_KEY` 读取（需为有效 Fernet 格式）
 - 若 `ENCRYPTION_KEY` 未配置或格式无效，自动从 `.encryption_key` 文件读取
 - 若文件也不存在，自动生成新密钥并持久化到 `.encryption_key`

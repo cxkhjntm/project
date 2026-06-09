@@ -1,12 +1,17 @@
 """Provider model for LLM service configuration."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.role_card import RoleCard
 
 
 class Provider(Base):
@@ -32,7 +37,7 @@ class Provider(Base):
     )
 
     # Relationships
-    role_cards: Mapped[list["RoleCard"]] = relationship(back_populates="default_provider")
+    role_cards: Mapped[list[RoleCard]] = relationship(back_populates="default_provider")
 
     def __repr__(self) -> str:
         return f"<Provider {self.name} ({self.type})>"

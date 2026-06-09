@@ -7,14 +7,24 @@ import sys
 import structlog
 from structlog.types import EventDict, WrappedLogger
 
-SENSITIVE_KEY_NAMES = {"api_key", "apikey", "password", "passwd", "token", "secret", "authorization"}
+SENSITIVE_KEY_NAMES = {
+    "api_key",
+    "apikey",
+    "password",
+    "passwd",
+    "token",
+    "secret",
+    "authorization",
+}
 
 SENSITIVE_PATTERNS = [
-    (re.compile(r'(sk-[a-zA-Z0-9]{8})[a-zA-Z0-9]+', re.IGNORECASE), r'\1***'),
+    (re.compile(r"(sk-[a-zA-Z0-9]{8})[a-zA-Z0-9]+", re.IGNORECASE), r"\1***"),
 ]
 
 
-def mask_sensitive_data(logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
+def mask_sensitive_data(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
     """Mask sensitive data in log events."""
     for key, value in list(event_dict.items()):
         if isinstance(value, str):

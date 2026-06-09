@@ -1,8 +1,9 @@
 """Tests for room service."""
 
 import pytest
+
+from app.schemas.room import ParticipantInput, RoomCreate
 from app.services.room_service import RoomService
-from app.schemas.room import RoomCreate, ParticipantInput
 
 
 @pytest.fixture

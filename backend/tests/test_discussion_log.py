@@ -1,10 +1,9 @@
 """Tests for discussion log generator service."""
 
 import os
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.discussion_log import DiscussionLogGenerator
@@ -20,7 +19,7 @@ def sample_messages():
             "sender_id": None,
             "content": "Welcome to the discussion. Today we will plan the new API.",
             "round": 1,
-            "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
         },
         {
             "id": "msg-2",
@@ -28,7 +27,7 @@ def sample_messages():
             "sender_id": "role-architect",
             "content": "I recommend using a RESTful design with FastAPI.",
             "round": 1,
-            "created_at": datetime(2025, 1, 1, 10, 1, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 1, 0, tzinfo=UTC),
         },
         {
             "id": "msg-3",
@@ -36,7 +35,7 @@ def sample_messages():
             "sender_id": "role-pm",
             "content": "We should focus on MVP scope first.",
             "round": 1,
-            "created_at": datetime(2025, 1, 1, 10, 2, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 2, 0, tzinfo=UTC),
         },
         {
             "id": "msg-4",
@@ -44,7 +43,7 @@ def sample_messages():
             "sender_id": None,
             "content": "Good points. Let's continue to the next round.",
             "round": 2,
-            "created_at": datetime(2025, 1, 1, 10, 3, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 3, 0, tzinfo=UTC),
         },
         {
             "id": "msg-5",
@@ -52,7 +51,7 @@ def sample_messages():
             "sender_id": "role-architect",
             "content": "For the database layer, I suggest SQLAlchemy with async support.",
             "round": 2,
-            "created_at": datetime(2025, 1, 1, 10, 4, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2025, 1, 1, 10, 4, 0, tzinfo=UTC),
         },
     ]
 
@@ -172,7 +171,9 @@ class TestBuildLogContent:
 class TestGenerateLog:
     """Tests for the generate_log method."""
 
-    async def test_creates_output_file(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_creates_output_file(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that generate_log creates the output markdown file."""
         from app.models.room import Room
 
@@ -194,12 +195,14 @@ class TestGenerateLog:
         )
 
         assert os.path.isfile(artifact.file_path)
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
         assert "Test Room" in content
         assert "Test goal" in content
 
-    async def test_saves_database_record(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_saves_database_record(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that generate_log saves an Artifact record to the database."""
         from app.models.room import Room
 
@@ -226,7 +229,9 @@ class TestGenerateLog:
         assert artifact.title == "DB Test Room"
         assert artifact.file_path is not None
 
-    async def test_returns_artifact_metadata(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_returns_artifact_metadata(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that generate_log returns correct metadata."""
         from app.models.room import Room
 
@@ -252,7 +257,9 @@ class TestGenerateLog:
         assert artifact.summary is not None
         assert len(artifact.summary) > 0
 
-    async def test_generates_unique_directory_per_run(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_generates_unique_directory_per_run(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that each log run creates a unique subdirectory."""
         from app.models.room import Room
 
@@ -287,7 +294,9 @@ class TestGenerateLog:
                 output_directory=output_dir,
             )
 
-    async def test_file_contains_structured_content(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_file_contains_structured_content(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that the generated file has proper Markdown structure."""
         from app.models.room import Room
 
@@ -308,14 +317,16 @@ class TestGenerateLog:
             output_directory=output_dir,
         )
 
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
 
         assert content.startswith("# ")
         assert "## " in content
         assert "---" in content
 
-    async def test_file_path_is_discussion_log(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_file_path_is_discussion_log(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that the output file is named discussion-log.md."""
         from app.models.room import Room
 
@@ -362,7 +373,7 @@ class TestDiscussionLogEdgeCases:
                 "sender_id": None,
                 "content": "This discussion has concluded.",
                 "round": 1,
-                "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+                "created_at": datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
             }
         ]
 
@@ -377,7 +388,7 @@ class TestDiscussionLogEdgeCases:
         assert artifact is not None
         assert os.path.isfile(artifact.file_path)
 
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
         assert "This discussion has concluded" in content
 
@@ -401,7 +412,9 @@ class TestDiscussionLogEdgeCases:
         label = log_generator._get_sender_label("system", None)
         assert label == "系统"
 
-    async def test_artifact_type_is_markdown(self, log_generator, sample_messages, output_dir, db_session):
+    async def test_artifact_type_is_markdown(
+        self, log_generator, sample_messages, output_dir, db_session
+    ):
         """Test that generated artifact has correct type."""
         from app.models.room import Room
 

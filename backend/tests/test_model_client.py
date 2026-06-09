@@ -1,17 +1,17 @@
 """Tests for model client."""
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import pytest
 
 from app.services.model_client import (
     ModelClient,
     ModelClientError,
     ModelResponse,
-    get_global_client,
     close_global_client,
+    get_global_client,
 )
 
 
@@ -24,32 +24,24 @@ async def test_model_client_chat_completion():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     mock_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": "Test response"
-                }
-            }
-        ],
+        "choices": [{"message": {"content": "Test response"}}],
         "usage": {
             "prompt_tokens": 10,
             "completion_tokens": 5,
             "total_tokens": 15,
-        }
+        },
     }
-    
+
     # Act
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = AsyncMock(
             status_code=200,
             json=lambda: mock_response,
         )
-        result = await client.chat_completion(
-            messages=[{"role": "user", "content": "Hello"}]
-        )
-    
+        result = await client.chat_completion(messages=[{"role": "user", "content": "Hello"}])
+
     # Assert
     assert isinstance(result, ModelResponse)
     assert result.content == "Test response"
@@ -66,7 +58,7 @@ async def test_model_client_retry_on_failure():
         model="gpt-4o",
         max_retries=2,
     )
-    
+
     # Act
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.side_effect = [
@@ -79,10 +71,8 @@ async def test_model_client_retry_on_failure():
                 },
             ),
         ]
-        result = await client.chat_completion(
-            messages=[{"role": "user", "content": "Hello"}]
-        )
-    
+        result = await client.chat_completion(messages=[{"role": "user", "content": "Hello"}])
+
     # Assert
     assert result.content == "Retry success"
     assert mock_post.call_count == 2
@@ -93,6 +83,7 @@ async def test_get_global_client_creates_instance():
     """Test that get_global_client creates a singleton instance."""
     # Arrange - ensure clean state
     import app.services.model_client as module
+
     module._global_client = None
 
     # Act
@@ -111,6 +102,7 @@ async def test_get_global_client_returns_same_instance():
     """Test that get_global_client returns the same instance on multiple calls."""
     # Arrange - ensure clean state
     import app.services.model_client as module
+
     module._global_client = None
 
     # Act
@@ -129,6 +121,7 @@ async def test_global_client_has_connection_pool_config():
     """Test that global client has proper connection pool configuration."""
     # Arrange - ensure clean state
     import app.services.model_client as module
+
     module._global_client = None
 
     # Act
@@ -148,8 +141,9 @@ async def test_close_global_client():
     """Test that close_global_client properly closes and resets the client."""
     # Arrange - ensure clean state
     import app.services.model_client as module
+
     module._global_client = None
-    client = await get_global_client()
+    await get_global_client()
     assert module._global_client is not None
 
     # Act
@@ -161,12 +155,13 @@ async def test_close_global_client():
 
 # ===== Streaming Tests =====
 
+
 def _make_sse_chunks(*content_parts: str) -> list[bytes]:
     """Helper to create SSE-formatted byte chunks.
-    
+
     Args:
         content_parts: Content strings for each delta
-        
+
     Returns:
         List of bytes chunks in SSE format
     """
@@ -195,25 +190,25 @@ async def test_chat_completion_stream_yields_content():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     chunks = _make_sse_chunks("Hello", " world", "!")
-    
+
     # Create mock response that supports streaming
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = MagicMock()
-    
+
     async def mock_aiter_bytes():
         for chunk in chunks:
             yield chunk
-    
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     # Create mock stream context manager
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act
     with patch("httpx.AsyncClient.stream", return_value=mock_stream) as mock_stream_call:
         results = []
@@ -221,7 +216,7 @@ async def test_chat_completion_stream_yields_content():
             messages=[{"role": "user", "content": "Hello"}]
         ):
             results.append(chunk)
-    
+
     # Assert
     assert results == ["Hello", " world", "!"]
     mock_stream_call.assert_called_once()
@@ -238,23 +233,23 @@ async def test_chat_completion_stream_sends_correct_payload():
         temperature=0.5,
         max_tokens=100,
     )
-    
+
     chunks = _make_sse_chunks("ok")
-    
+
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = MagicMock()
-    
+
     async def mock_aiter_bytes():
         for chunk in chunks:
             yield chunk
-    
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act
     with patch("httpx.AsyncClient.stream", return_value=mock_stream) as mock_stream_call:
         async for _ in client.chat_completion_stream(
@@ -264,10 +259,13 @@ async def test_chat_completion_stream_sends_correct_payload():
             stop=["END"],
         ):
             pass
-    
+
     # Assert - check the payload passed to stream()
     call_kwargs = mock_stream_call.call_args
-    assert call_kwargs.kwargs.get("json", call_kwargs[1].get("json") if len(call_kwargs) > 1 else None) is not None
+    assert (
+        call_kwargs.kwargs.get("json", call_kwargs[1].get("json") if len(call_kwargs) > 1 else None)
+        is not None
+    )
     payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
     assert payload["model"] == "gpt-4o"
     assert payload["temperature"] == 0.3
@@ -285,7 +283,7 @@ async def test_chat_completion_stream_handles_done_terminator():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     # Create chunks with [DONE] in the middle (simulating premature DONE)
     data1 = {"choices": [{"delta": {"content": "first"}}]}
     data2 = {"choices": [{"delta": {"content": "second"}}]}
@@ -294,21 +292,21 @@ async def test_chat_completion_stream_handles_done_terminator():
         b"data: [DONE]\n\n",
         f"data: {json.dumps(data2)}\n\n".encode(),  # Should be ignored
     ]
-    
+
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = MagicMock()
-    
+
     async def mock_aiter_bytes():
         for chunk in chunks:
             yield chunk
-    
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act
     with patch("httpx.AsyncClient.stream", return_value=mock_stream):
         results = []
@@ -316,7 +314,7 @@ async def test_chat_completion_stream_handles_done_terminator():
             messages=[{"role": "user", "content": "test"}]
         ):
             results.append(chunk)
-    
+
     # Assert - only content before [DONE] should be yielded
     assert results == ["first"]
 
@@ -330,33 +328,33 @@ async def test_chat_completion_stream_handles_empty_delta():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     # Some chunks have empty delta (role announcement, etc.)
     data_role = {"choices": [{"delta": {"role": "assistant"}}]}
     data_empty = {"choices": [{"delta": {}}]}
     data_content = {"choices": [{"delta": {"content": "hello"}}]}
-    
+
     chunks = [
         f"data: {json.dumps(data_role)}\n\n".encode(),
         f"data: {json.dumps(data_empty)}\n\n".encode(),
         f"data: {json.dumps(data_content)}\n\n".encode(),
         b"data: [DONE]\n\n",
     ]
-    
+
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = MagicMock()
-    
+
     async def mock_aiter_bytes():
         for chunk in chunks:
             yield chunk
-    
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act
     with patch("httpx.AsyncClient.stream", return_value=mock_stream):
         results = []
@@ -364,7 +362,7 @@ async def test_chat_completion_stream_handles_empty_delta():
             messages=[{"role": "user", "content": "test"}]
         ):
             results.append(chunk)
-    
+
     # Assert - only content with actual text should be yielded
     assert results == ["hello"]
 
@@ -378,7 +376,7 @@ async def test_chat_completion_stream_handles_api_error():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     mock_response = AsyncMock()
     mock_response.status_code = 401
     mock_response.raise_for_status = MagicMock(
@@ -388,11 +386,11 @@ async def test_chat_completion_stream_handles_api_error():
             response=MagicMock(status_code=401, text="Invalid API key"),
         )
     )
-    
+
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act & Assert
     with patch("httpx.AsyncClient.stream", return_value=mock_stream):
         with pytest.raises(ModelClientError) as exc_info:
@@ -400,7 +398,7 @@ async def test_chat_completion_stream_handles_api_error():
                 messages=[{"role": "user", "content": "test"}]
             ):
                 pass
-    
+
     assert "401" in str(exc_info.value) or "Unauthorized" in str(exc_info.value)
 
 
@@ -413,13 +411,11 @@ async def test_chat_completion_stream_handles_network_error():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     mock_stream = AsyncMock()
-    mock_stream.__aenter__ = AsyncMock(
-        side_effect=httpx.ConnectError("Connection refused")
-    )
+    mock_stream.__aenter__ = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act & Assert
     with patch("httpx.AsyncClient.stream", return_value=mock_stream):
         with pytest.raises(ModelClientError):
@@ -438,27 +434,27 @@ async def test_chat_completion_stream_handles_malformed_json():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     chunks = [
         b"data: {invalid json}\n\n",
         f"data: {json.dumps({'choices': [{'delta': {'content': 'ok'}}]})}\n\n".encode(),
         b"data: [DONE]\n\n",
     ]
-    
+
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = MagicMock()
-    
+
     async def mock_aiter_bytes():
         for chunk in chunks:
             yield chunk
-    
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act
     with patch("httpx.AsyncClient.stream", return_value=mock_stream):
         results = []
@@ -466,7 +462,7 @@ async def test_chat_completion_stream_handles_malformed_json():
             messages=[{"role": "user", "content": "test"}]
         ):
             results.append(chunk)
-    
+
     # Assert - malformed line skipped, valid content yielded
     assert results == ["ok"]
 
@@ -480,23 +476,23 @@ async def test_chat_completion_stream_empty_stream():
         api_key="sk-test",
         model="gpt-4o",
     )
-    
+
     chunks = [b"data: [DONE]\n\n"]
-    
+
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = MagicMock()
-    
+
     async def mock_aiter_bytes():
         for chunk in chunks:
             yield chunk
-    
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     mock_stream = AsyncMock()
     mock_stream.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream.__aexit__ = AsyncMock(return_value=False)
-    
+
     # Act
     with patch("httpx.AsyncClient.stream", return_value=mock_stream):
         results = []
@@ -504,6 +500,6 @@ async def test_chat_completion_stream_empty_stream():
             messages=[{"role": "user", "content": "test"}]
         ):
             results.append(chunk)
-    
+
     # Assert - no content chunks
     assert results == []

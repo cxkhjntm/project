@@ -2,11 +2,11 @@
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config import settings
-from app.database import Base, engine, async_session_factory
+from app.database import Base, async_session_factory, engine
 
 
 def test_settings_defaults():
@@ -17,6 +17,7 @@ def test_settings_defaults():
     # encryption_key may be set from .env or empty (auto-generated at runtime)
     if settings.encryption_key:
         from cryptography.fernet import Fernet
+
         Fernet(settings.encryption_key.encode())  # Should not raise
     assert settings.default_max_tokens == 4096
     assert settings.default_temperature == 0.7
@@ -26,16 +27,39 @@ def test_settings_defaults():
 
 def test_settings_allowed_extensions():
     expected_extensions = [
-        ".txt", ".md", ".json", ".csv", ".py", ".ts", ".js", ".tsx", ".jsx",
-        ".html", ".css", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+        ".txt",
+        ".md",
+        ".json",
+        ".csv",
+        ".py",
+        ".ts",
+        ".js",
+        ".tsx",
+        ".jsx",
+        ".html",
+        ".css",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
     ]
     assert settings.allowed_extensions == expected_extensions
 
 
 def test_settings_excluded_directories():
     expected_directories = [
-        "node_modules", ".git", "dist", "build", ".next", ".venv",
-        "__pycache__", "target", "coverage", ".idea", ".vscode",
+        "node_modules",
+        ".git",
+        "dist",
+        "build",
+        ".next",
+        ".venv",
+        "__pycache__",
+        "target",
+        "coverage",
+        ".idea",
+        ".vscode",
     ]
     assert settings.excluded_directories == expected_directories
 
@@ -82,11 +106,13 @@ async def test_get_session_yields_session():
     test_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
     import app.database
+
     original_factory = app.database.async_session_factory
     app.database.async_session_factory = test_factory
 
     try:
         from app.database import get_session
+
         gen = get_session()
         session = await gen.__anext__()
         assert isinstance(session, AsyncSession)
@@ -103,11 +129,13 @@ async def test_session_commit_on_success():
     test_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
     import app.database
+
     original_factory = app.database.async_session_factory
     app.database.async_session_factory = test_factory
 
     try:
         from app.database import get_session
+
         gen = get_session()
         session = await gen.__anext__()
 

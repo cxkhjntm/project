@@ -1,14 +1,11 @@
 """Artifact API endpoints."""
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.models.artifact import Artifact
-from app.models.message import Message
 from app.models.room import Room
 from app.schemas.artifact import (
     ArtifactContent,
@@ -31,10 +28,12 @@ router = APIRouter(tags=["artifacts"])
 )
 async def synthesize_artifact(
     room_id: str,
-    request: SynthesizeRequest,
+    request: SynthesizeRequest | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> SynthesizeResponse:
     """Generate artifact from room discussion messages."""
+    request = request or SynthesizeRequest()
+
     result = await session.execute(select(Room).where(Room.id == room_id))
     room = result.scalar_one_or_none()
 
@@ -43,9 +42,7 @@ async def synthesize_artifact(
 
     messages = await message_service.get_by_room(session, room_id)
     if not messages:
-        raise HTTPException(
-            status_code=400, detail="No messages found in room for synthesis"
-        )
+        raise HTTPException(status_code=400, detail="No messages found in room for synthesis")
 
     message_dicts = [
         {
@@ -76,7 +73,7 @@ async def synthesize_artifact(
 
     content_preview = None
     try:
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
             content_preview = content[:500]
     except OSError:
@@ -91,12 +88,12 @@ async def synthesize_artifact(
 
 @router.get(
     "/api/rooms/{room_id}/artifacts",
-    response_model=List[ArtifactResponse],
+    response_model=list[ArtifactResponse],
 )
 async def list_artifacts(
     room_id: str,
     session: AsyncSession = Depends(get_session),
-) -> List[ArtifactResponse]:
+) -> list[ArtifactResponse]:
     """List all artifacts for a room."""
     result = await session.execute(select(Room).where(Room.id == room_id))
     room = result.scalar_one_or_none()
@@ -105,9 +102,7 @@ async def list_artifacts(
         raise HTTPException(status_code=404, detail="Room not found")
 
     result = await session.execute(
-        select(Artifact)
-        .where(Artifact.room_id == room_id)
-        .order_by(Artifact.created_at.desc())
+        select(Artifact).where(Artifact.room_id == room_id).order_by(Artifact.created_at.desc())
     )
     artifacts = result.scalars().all()
 
@@ -123,16 +118,14 @@ async def get_artifact_content(
     session: AsyncSession = Depends(get_session),
 ) -> ArtifactContent:
     """Get the content of an artifact file."""
-    result = await session.execute(
-        select(Artifact).where(Artifact.id == artifact_id)
-    )
+    result = await session.execute(select(Artifact).where(Artifact.id == artifact_id))
     artifact = result.scalar_one_or_none()
 
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     try:
-        with open(artifact.file_path, "r", encoding="utf-8") as f:
+        with open(artifact.file_path, encoding="utf-8") as f:
             content = f.read()
     except OSError as e:
         logger.error(
@@ -141,8 +134,6 @@ async def get_artifact_content(
             file_path=artifact.file_path,
             error=str(e),
         )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to read artifact file: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to read artifact file: {e}")
 
     return ArtifactContent(content=content, encoding="utf-8")

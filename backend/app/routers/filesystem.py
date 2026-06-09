@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -26,7 +25,7 @@ class DirectoryEntry(BaseModel):
 class DirectoryListing(BaseModel):
     current_path: str
     parent_path: str | None
-    entries: List[DirectoryEntry]
+    entries: list[DirectoryEntry]
 
 
 class ShortcutEntry(BaseModel):
@@ -50,8 +49,17 @@ class LocalFileRequest(BaseModel):
 
 
 EXCLUDED_DIRS = {
-    "node_modules", ".git", "__pycache__", ".venv", "venv",
-    "dist", "build", ".next", "target", ".idea", ".vscode",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".next",
+    "target",
+    ".idea",
+    ".vscode",
 }
 
 
@@ -74,7 +82,7 @@ async def browse_directory(
     if not target.is_dir():
         raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
 
-    entries: List[DirectoryEntry] = []
+    entries: list[DirectoryEntry] = []
     try:
         for item in sorted(target.iterdir(), key=lambda p: p.name.lower()):
             if item.name.startswith("."):
@@ -99,8 +107,8 @@ async def browse_directory(
     )
 
 
-@router.get("/shortcuts", response_model=List[ShortcutEntry])
-async def get_shortcuts() -> List[ShortcutEntry]:
+@router.get("/shortcuts", response_model=list[ShortcutEntry])
+async def get_shortcuts() -> list[ShortcutEntry]:
     """返回常用文件夹快捷入口（桌面、文档、下载等）。"""
     home = Path.home()
     candidates = [
@@ -117,7 +125,7 @@ async def get_shortcuts() -> List[ShortcutEntry]:
             if drive.exists():
                 candidates.append((f"{drive_letter}: 盘", drive, "💾"))
 
-    shortcuts: List[ShortcutEntry] = []
+    shortcuts: list[ShortcutEntry] = []
     for name, path, icon in candidates:
         if path.exists() and path.is_dir():
             shortcuts.append(ShortcutEntry(name=name, path=str(path), icon=icon))
@@ -139,7 +147,7 @@ async def create_directory(request: MkdirRequest) -> MkdirResponse:
     name = request.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="文件夹名称不能为空")
-    if any(c in name for c in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']):
+    if any(c in name for c in ["/", "\\", ":", "*", "?", '"', "<", ">", "|"]):
         raise HTTPException(status_code=400, detail="文件夹名称包含非法字符")
 
     target = parent / name
@@ -172,9 +180,7 @@ async def add_local_file_source(
         raise HTTPException(status_code=404, detail="Room not found")
 
     try:
-        source = await file_ingestion_service.ingest_local_file(
-            session, room_id, request.file_path
-        )
+        source = await file_ingestion_service.ingest_local_file(session, room_id, request.file_path)
     except PathValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:

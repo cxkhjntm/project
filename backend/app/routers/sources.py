@@ -1,16 +1,13 @@
 """Shared source API endpoints."""
 
-import os
-from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.schemas.shared_source import SharedSourceResponse
 from app.services.file_ingestion import file_ingestion_service
 from app.services.room_service import room_service
-from app.utils.path_validator import validate_path, PathValidationError
+from app.utils.path_validator import PathValidationError, validate_path_safety
 
 router = APIRouter(tags=["sources"])
 
@@ -40,22 +37,26 @@ async def add_source(
             session, room_id, file.filename or "unknown", file_content
         )
         if not source:
-            raise HTTPException(status_code=400, detail="File rejected: invalid extension or too large")
+            raise HTTPException(
+                status_code=400, detail="File rejected: invalid extension or too large"
+            )
 
     elif source_type == "folder":
         if not path:
             raise HTTPException(status_code=400, detail="Path is required for source_type='folder'")
         try:
-            validate_path(path, os.getcwd())
+            safe_path = validate_path_safety(path)
         except PathValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        source = await file_ingestion_service.add_folder_source(session, room_id, path)
+        source = await file_ingestion_service.add_folder_source(session, room_id, safe_path)
         if not source:
             raise HTTPException(status_code=400, detail="Invalid folder path")
 
     elif source_type == "text":
         if not content:
-            raise HTTPException(status_code=400, detail="Content is required for source_type='text'")
+            raise HTTPException(
+                status_code=400, detail="Content is required for source_type='text'"
+            )
         source = await file_ingestion_service.add_text_source(session, room_id, content)
 
     else:
@@ -64,11 +65,11 @@ async def add_source(
     return SharedSourceResponse.model_validate(source)
 
 
-@router.get("/api/rooms/{room_id}/sources", response_model=List[SharedSourceResponse])
+@router.get("/api/rooms/{room_id}/sources", response_model=list[SharedSourceResponse])
 async def list_sources(
     room_id: str,
     session: AsyncSession = Depends(get_session),
-) -> List[SharedSourceResponse]:
+) -> list[SharedSourceResponse]:
     room = await room_service.get_by_id(session, room_id)
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")

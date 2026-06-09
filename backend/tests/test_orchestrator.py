@@ -1,13 +1,14 @@
 """Tests for orchestrator."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.services.orchestrator import (
-    Orchestrator,
-    DiscussionState,
-    SSEEventType,
     CONVERGENCE_KEYWORDS,
+    DiscussionState,
+    Orchestrator,
+    SSEEventType,
     check_convergence,
     parse_host_action,
 )
@@ -33,10 +34,10 @@ async def test_orchestrator_initialization():
             )
         ],
     )
-    
+
     # Act
     orchestrator = Orchestrator(session=mock_session, room=room)
-    
+
     # Assert
     assert orchestrator.room_id == "room-1"
     assert orchestrator.goal == "Test goal"
@@ -57,22 +58,22 @@ async def test_orchestrator_should_continue():
         participants=[MagicMock()],
     )
     orchestrator = Orchestrator(session=mock_session, room=room)
-    
+
     # Act & Assert
-    assert orchestrator.should_continue() == True
-    
+    assert orchestrator.should_continue()
+
     orchestrator.current_round = 2
-    assert orchestrator.should_continue() == True
-    
+    assert orchestrator.should_continue()
+
     orchestrator.current_round = 3
-    assert orchestrator.should_continue() == False
+    assert not orchestrator.should_continue()
 
 
 @pytest.mark.asyncio
 async def test_sse_event_type_has_token():
     """Test SSEEventType enum includes TOKEN."""
     # Assert
-    assert hasattr(SSEEventType, 'TOKEN')
+    assert hasattr(SSEEventType, "TOKEN")
     assert SSEEventType.TOKEN == "token"
 
 
@@ -96,28 +97,29 @@ async def test_expert_turn_sends_token_events():
             )
         ],
     )
-    
+
     orchestrator = Orchestrator(
         session=mock_session,
         room=room,
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
-    
+
     async def mock_stream(*args, **kwargs):
         for chunk in ["Hello", " world", "!"]:
             yield chunk
-    
-    with patch('app.services.model_client.create_model_client') as mock_create_client, \
-         patch('app.services.role_card_service.role_card_service') as mock_role_card_service, \
-         patch('app.services.message_service.message_service') as mock_message_service, \
-         patch('app.services.crypto.crypto_service') as mock_crypto_service, \
-         patch('app.services.provider_service.provider_service') as mock_provider_service:
-        
+
+    with (
+        patch("app.services.model_client.create_model_client") as mock_create_client,
+        patch("app.services.role_card_service.role_card_service") as mock_role_card_service,
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.crypto.crypto_service") as mock_crypto_service,
+        patch("app.services.provider_service.provider_service") as mock_provider_service,
+    ):
         mock_client = MagicMock()
         mock_client.chat_completion_stream = mock_stream
         mock_create_client.return_value = mock_client
-        
+
         mock_role_card = MagicMock()
         mock_role_card.name = "Expert 1"
         mock_role_card.description = "Test expert"
@@ -125,17 +127,17 @@ async def test_expert_turn_sends_token_events():
         mock_role_card.responsibilities = []
         mock_role_card.constraints = []
         mock_role_card_service.get_by_id = AsyncMock(return_value=mock_role_card)
-        
+
         mock_provider = MagicMock()
         mock_provider.api_key_encrypted = "encrypted"
         mock_provider_service.get_by_id = AsyncMock(return_value=mock_provider)
-        
+
         mock_crypto_service.decrypt.return_value = "api-key"
-        
+
         mock_message = MagicMock()
         mock_message.id = "msg-1"
         mock_message_service.create = AsyncMock(return_value=mock_message)
-        
+
         participant = {
             "role_card_id": "role-1",
             "name": "Expert 1",
@@ -144,17 +146,16 @@ async def test_expert_turn_sends_token_events():
             "base_url": "http://test.com",
         }
         await orchestrator._run_expert_turn(participant)
-        
+
         token_events = [
-            call for call in mock_on_event.call_args_list
-            if call[0][0] == SSEEventType.TOKEN
+            call for call in mock_on_event.call_args_list if call[0][0] == SSEEventType.TOKEN
         ]
         assert len(token_events) == 3
-        
+
         assert token_events[0][0][1]["room_id"] == "room-1"
         assert token_events[0][0][1]["role"] == "Expert 1"
         assert token_events[0][0][1]["content"] == "Hello"
-        
+
         assert token_events[1][0][1]["content"] == " world"
         assert token_events[2][0][1]["content"] == "!"
 
@@ -179,28 +180,29 @@ async def test_expert_turn_sends_message_after_stream():
             )
         ],
     )
-    
+
     orchestrator = Orchestrator(
         session=mock_session,
         room=room,
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
-    
+
     async def mock_stream(*args, **kwargs):
         for chunk in ["Test", " response"]:
             yield chunk
-    
-    with patch('app.services.model_client.create_model_client') as mock_create_client, \
-         patch('app.services.role_card_service.role_card_service') as mock_role_card_service, \
-         patch('app.services.message_service.message_service') as mock_message_service, \
-         patch('app.services.crypto.crypto_service') as mock_crypto_service, \
-         patch('app.services.provider_service.provider_service') as mock_provider_service:
-        
+
+    with (
+        patch("app.services.model_client.create_model_client") as mock_create_client,
+        patch("app.services.role_card_service.role_card_service") as mock_role_card_service,
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.crypto.crypto_service") as mock_crypto_service,
+        patch("app.services.provider_service.provider_service") as mock_provider_service,
+    ):
         mock_client = MagicMock()
         mock_client.chat_completion_stream = mock_stream
         mock_create_client.return_value = mock_client
-        
+
         mock_role_card = MagicMock()
         mock_role_card.name = "Expert 1"
         mock_role_card.description = "Test expert"
@@ -208,17 +210,17 @@ async def test_expert_turn_sends_message_after_stream():
         mock_role_card.responsibilities = []
         mock_role_card.constraints = []
         mock_role_card_service.get_by_id = AsyncMock(return_value=mock_role_card)
-        
+
         mock_provider = MagicMock()
         mock_provider.api_key_encrypted = "encrypted"
         mock_provider_service.get_by_id = AsyncMock(return_value=mock_provider)
-        
+
         mock_crypto_service.decrypt.return_value = "api-key"
-        
+
         mock_message = MagicMock()
         mock_message.id = "msg-1"
         mock_message_service.create = AsyncMock(return_value=mock_message)
-        
+
         participant = {
             "role_card_id": "role-1",
             "name": "Expert 1",
@@ -227,13 +229,12 @@ async def test_expert_turn_sends_message_after_stream():
             "base_url": "http://test.com",
         }
         await orchestrator._run_expert_turn(participant)
-        
+
         message_events = [
-            call for call in mock_on_event.call_args_list
-            if call[0][0] == SSEEventType.MESSAGE
+            call for call in mock_on_event.call_args_list if call[0][0] == SSEEventType.MESSAGE
         ]
         assert len(message_events) == 1
-        
+
         msg_data = message_events[0][0][1]
         assert msg_data["id"] == "msg-1"
         assert msg_data["room_id"] == "room-1"
@@ -263,50 +264,50 @@ async def test_orchestrator_turn_sends_token_events():
             )
         ],
     )
-    
+
     orchestrator = Orchestrator(
         session=mock_session,
         room=room,
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
-    
+
     async def mock_stream(*args, **kwargs):
         for chunk in ["Let", " me", " think", "..."]:
             yield chunk
-    
-    with patch('app.services.model_client.create_model_client') as mock_create_client, \
-         patch('app.services.message_service.message_service') as mock_message_service, \
-         patch('app.services.crypto.crypto_service') as mock_crypto_service, \
-         patch('app.services.provider_service.provider_service') as mock_provider_service, \
-         patch('app.services.context_builder.context_builder') as mock_context_builder:
-        
+
+    with (
+        patch("app.services.model_client.create_model_client") as mock_create_client,
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.crypto.crypto_service") as mock_crypto_service,
+        patch("app.services.provider_service.provider_service") as mock_provider_service,
+        patch("app.services.context_builder.context_builder") as mock_context_builder,
+    ):
         mock_client = MagicMock()
         mock_client.chat_completion_stream = mock_stream
         mock_create_client.return_value = mock_client
-        
+
         mock_provider = MagicMock()
         mock_provider.api_key_encrypted = "encrypted"
         mock_provider_service.get_by_id = AsyncMock(return_value=mock_provider)
-        
+
         mock_crypto_service.decrypt.return_value = "api-key"
-        
+
         mock_message = MagicMock()
         mock_message.id = "msg-orch-1"
         mock_message_service.create = AsyncMock(return_value=mock_message)
-        
+
         mock_context_builder.build_orchestrator_prompt.return_value = "test prompt"
-        
+
         result = await orchestrator._run_orchestrator_turn()
-        
+
         token_events = [
-            call for call in mock_on_event.call_args_list
-            if call[0][0] == SSEEventType.TOKEN
+            call for call in mock_on_event.call_args_list if call[0][0] == SSEEventType.TOKEN
         ]
         assert len(token_events) == 4
         assert token_events[0][0][1]["content"] == "Let"
         assert token_events[1][0][1]["content"] == " me"
-        
+
         assert result == "Let me think..."
 
 
@@ -330,48 +331,48 @@ async def test_orchestrator_turn_sends_message_after_stream():
             )
         ],
     )
-    
+
     orchestrator = Orchestrator(
         session=mock_session,
         room=room,
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
-    
+
     async def mock_stream(*args, **kwargs):
         for chunk in ["Round", " 1", " complete"]:
             yield chunk
-    
-    with patch('app.services.model_client.create_model_client') as mock_create_client, \
-         patch('app.services.message_service.message_service') as mock_message_service, \
-         patch('app.services.crypto.crypto_service') as mock_crypto_service, \
-         patch('app.services.provider_service.provider_service') as mock_provider_service, \
-         patch('app.services.context_builder.context_builder') as mock_context_builder:
-        
+
+    with (
+        patch("app.services.model_client.create_model_client") as mock_create_client,
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.crypto.crypto_service") as mock_crypto_service,
+        patch("app.services.provider_service.provider_service") as mock_provider_service,
+        patch("app.services.context_builder.context_builder") as mock_context_builder,
+    ):
         mock_client = MagicMock()
         mock_client.chat_completion_stream = mock_stream
         mock_create_client.return_value = mock_client
-        
+
         mock_provider = MagicMock()
         mock_provider.api_key_encrypted = "encrypted"
         mock_provider_service.get_by_id = AsyncMock(return_value=mock_provider)
-        
+
         mock_crypto_service.decrypt.return_value = "api-key"
-        
+
         mock_message = MagicMock()
         mock_message.id = "msg-orch-1"
         mock_message_service.create = AsyncMock(return_value=mock_message)
-        
+
         mock_context_builder.build_orchestrator_prompt.return_value = "test prompt"
-        
-        result = await orchestrator._run_orchestrator_turn()
-        
+
+        await orchestrator._run_orchestrator_turn()
+
         message_events = [
-            call for call in mock_on_event.call_args_list
-            if call[0][0] == SSEEventType.MESSAGE
+            call for call in mock_on_event.call_args_list if call[0][0] == SSEEventType.MESSAGE
         ]
         assert len(message_events) == 1
-        
+
         msg_data = message_events[0][0][1]
         assert msg_data["id"] == "msg-orch-1"
         assert msg_data["room_id"] == "room-1"
@@ -408,6 +409,15 @@ def test_parse_host_action_next():
     assert action is not None
     assert action["type"] == "next"
     assert action["expert_id"] == "expert_1"
+
+
+def test_parse_host_action_next_chinese_name():
+    """Test parsing ACTION: next with Chinese expert names."""
+    content = "请后端工程师继续补充，ACTION: next:后端工程师"
+    action = parse_host_action(content)
+    assert action is not None
+    assert action["type"] == "next"
+    assert action["expert_id"] == "后端工程师"
 
 
 def test_parse_host_action_none():
@@ -485,9 +495,7 @@ async def test_action_converge_stops_discussion():
         on_event=mock_on_event,
     )
 
-    orchestrator._run_orchestrator_turn = AsyncMock(
-        return_value="讨论充分，ACTION: converge"
-    )
+    orchestrator._run_orchestrator_turn = AsyncMock(return_value="讨论充分，ACTION: converge")
     orchestrator._run_expert_turn = AsyncMock()
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
@@ -527,9 +535,7 @@ async def test_action_synthesize_stops_discussion():
         on_event=mock_on_event,
     )
 
-    orchestrator._run_orchestrator_turn = AsyncMock(
-        return_value="可以总结了，ACTION: synthesize"
-    )
+    orchestrator._run_orchestrator_turn = AsyncMock(return_value="可以总结了，ACTION: synthesize")
     orchestrator._run_expert_turn = AsyncMock()
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
@@ -539,6 +545,53 @@ async def test_action_synthesize_stops_discussion():
 
     assert result["success"] is True
     assert result["total_rounds"] == 1
+
+
+@pytest.mark.asyncio
+async def test_action_next_runs_selected_expert_only():
+    """Test that ACTION: next only runs the selected expert."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    backend_role = MagicMock()
+    backend_role.name = "后端工程师"
+    frontend_role = MagicMock()
+    frontend_role.name = "前端工程师"
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=1,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                role_card=backend_role,
+                provider_id="provider-1",
+                provider=MagicMock(base_url="http://test.com", default_model="gpt-4"),
+            ),
+            MagicMock(
+                role_card_id="role-2",
+                role_card=frontend_role,
+                provider_id="provider-1",
+                provider=MagicMock(base_url="http://test.com", default_model="gpt-4"),
+            ),
+        ],
+    )
+
+    orchestrator = Orchestrator(session=mock_session, room=room, on_event=mock_on_event)
+    orchestrator._run_orchestrator_turn = AsyncMock(
+        return_value="请后端先补充，ACTION: next:后端工程师"
+    )
+    orchestrator._run_expert_turn = AsyncMock()
+    orchestrator._update_rolling_summary = AsyncMock()
+    orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
+    orchestrator.load_shared_sources = AsyncMock()
+    orchestrator._get_room_status = AsyncMock(return_value="running")
+
+    result = await orchestrator.run_discussion()
+
+    assert result["success"] is True
+    assert orchestrator._run_expert_turn.call_count == 1
+    called_participant = orchestrator._run_expert_turn.call_args[0][0]
+    assert called_participant["name"] == "后端工程师"
 
 
 @pytest.mark.asyncio
@@ -576,15 +629,12 @@ async def test_keyword_fallback_when_no_action():
         {"round": 2, "sender_type": "expert", "content": "LGTM"},
     ]
 
-    orchestrator._run_orchestrator_turn = AsyncMock(
-        return_value="请大家继续讨论"
-    )
+    orchestrator._run_orchestrator_turn = AsyncMock(return_value="请大家继续讨论")
     orchestrator._run_expert_turn = AsyncMock()
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
     orchestrator.load_shared_sources = AsyncMock()
 
-    original_should_continue = orchestrator.should_continue
     call_count = 0
 
     def mock_should_continue():
@@ -627,9 +677,7 @@ async def test_force_convergence_at_max_rounds():
     )
 
     # Mock _run_orchestrator_turn to return no ACTION
-    orchestrator._run_orchestrator_turn = AsyncMock(
-        return_value="继续讨论"
-    )
+    orchestrator._run_orchestrator_turn = AsyncMock(return_value="继续讨论")
     orchestrator._run_expert_turn = AsyncMock()
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)

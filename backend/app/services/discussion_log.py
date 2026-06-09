@@ -2,8 +2,8 @@
 
 import os
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 
 class DiscussionLogError(Exception):
     """Exception raised for discussion log errors."""
+
     pass
 
 
@@ -28,7 +29,7 @@ class DiscussionLogGenerator:
         room_id: str,
         room_name: str,
         goal: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         output_directory: str,
     ) -> Artifact:
         if not messages:
@@ -40,7 +41,7 @@ class DiscussionLogGenerator:
             messages=messages,
         )
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         log_dir = os.path.join(output_directory, f"discussion_log_{timestamp}")
 
         try:
@@ -54,9 +55,7 @@ class DiscussionLogGenerator:
                 log_dir=log_dir,
                 error=str(e),
             )
-            raise DiscussionLogError(
-                f"Failed to write discussion log to {log_dir}: {e}"
-            ) from e
+            raise DiscussionLogError(f"Failed to write discussion log to {log_dir}: {e}") from e
 
         summary = self._build_summary(messages)
 
@@ -86,7 +85,7 @@ class DiscussionLogGenerator:
         self,
         room_name: str,
         goal: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> str:
         return build_discussion_markdown(
             room_name=room_name,
@@ -95,8 +94,8 @@ class DiscussionLogGenerator:
             include_summary=True,
         )
 
-    def _get_sender_label(self, sender_type: str, sender_id: Optional[str]) -> str:
+    def _get_sender_label(self, sender_type: str, sender_id: str | None) -> str:
         return get_sender_label(sender_type, sender_id)
 
-    def _build_summary(self, messages: List[Dict[str, Any]]) -> str:
+    def _build_summary(self, messages: list[dict[str, Any]]) -> str:
         return build_summary(messages)

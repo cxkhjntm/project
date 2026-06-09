@@ -1,12 +1,11 @@
 """Tests for provider service."""
 
-import pytest
-from cryptography.fernet import Fernet
-from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import patch
 
-from app.models.provider import Provider
-from app.schemas.provider import ProviderCreate, ProviderUpdate
+import pytest
+from cryptography.fernet import Fernet
+
+from app.schemas.provider import ProviderCreate
 from app.services.provider_service import ProviderService
 
 
@@ -45,6 +44,7 @@ class TestProviderService:
     ) -> None:
         """Test that API key is encrypted when encryption is enabled."""
         from app.services.crypto import CryptoService
+
         with patch("app.services.crypto.settings") as mock_settings:
             mock_settings.encrypt_api_keys = True
             mock_settings.encryption_key = Fernet.generate_key().decode()

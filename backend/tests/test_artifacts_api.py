@@ -1,10 +1,10 @@
 """Tests for artifact API endpoints."""
 
 import os
-import pytest
 import tempfile
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -47,6 +47,7 @@ async def client(test_db_session: AsyncSession) -> AsyncGenerator[AsyncClient, N
 @pytest.fixture
 def sample_room(test_db_session: AsyncSession) -> Room:
     import uuid
+
     room = Room(
         id=str(uuid.uuid4()),
         name="Test Room",
@@ -64,6 +65,7 @@ def sample_room(test_db_session: AsyncSession) -> Room:
 @pytest.fixture
 def sample_artifact(test_db_session: AsyncSession, sample_room: Room) -> Artifact:
     import uuid
+
     artifact = Artifact(
         id=str(uuid.uuid4()),
         room_id=sample_room.id,
@@ -77,11 +79,8 @@ def sample_artifact(test_db_session: AsyncSession, sample_room: Room) -> Artifac
 
 
 class TestSynthesizeEndpoint:
-
     @pytest.mark.asyncio
-    async def test_synthesize_returns_404_for_nonexistent_room(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_synthesize_returns_404_for_nonexistent_room(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/rooms/nonexistent-room-id/synthesize",
             json={"artifact_type": "markdown"},
@@ -105,8 +104,9 @@ class TestSynthesizeEndpoint:
     async def test_synthesize_creates_artifact(
         self, client: AsyncClient, sample_room: Room, test_db_session: AsyncSession
     ) -> None:
-        from app.models.message import Message
         import uuid
+
+        from app.models.message import Message
 
         message = Message(
             id=str(uuid.uuid4()),
@@ -138,7 +138,6 @@ class TestSynthesizeEndpoint:
 
 
 class TestListArtifactsEndpoint:
-
     @pytest.mark.asyncio
     async def test_list_artifacts_returns_404_for_nonexistent_room(
         self, client: AsyncClient
@@ -161,9 +160,7 @@ class TestListArtifactsEndpoint:
         self, client: AsyncClient, sample_artifact: Artifact, test_db_session: AsyncSession
     ) -> None:
         await test_db_session.commit()
-        response = await client.get(
-            f"/api/rooms/{sample_artifact.room_id}/artifacts"
-        )
+        response = await client.get(f"/api/rooms/{sample_artifact.room_id}/artifacts")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -172,7 +169,6 @@ class TestListArtifactsEndpoint:
 
 
 class TestGetArtifactContentEndpoint:
-
     @pytest.mark.asyncio
     async def test_get_content_returns_404_for_nonexistent_artifact(
         self, client: AsyncClient
@@ -195,9 +191,7 @@ class TestGetArtifactContentEndpoint:
             sample_artifact.file_path = temp_path
             await test_db_session.commit()
 
-            response = await client.get(
-                f"/api/artifacts/{sample_artifact.id}/content"
-            )
+            response = await client.get(f"/api/artifacts/{sample_artifact.id}/content")
             assert response.status_code == 200
             data = response.json()
             assert "# Test Content" in data["content"]
@@ -212,8 +206,6 @@ class TestGetArtifactContentEndpoint:
         sample_artifact.file_path = "/nonexistent/path/artifact.md"
         await test_db_session.commit()
 
-        response = await client.get(
-            f"/api/artifacts/{sample_artifact.id}/content"
-        )
+        response = await client.get(f"/api/artifacts/{sample_artifact.id}/content")
         assert response.status_code == 500
         assert "Failed to read artifact file" in response.json()["message"]

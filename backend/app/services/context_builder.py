@@ -1,15 +1,15 @@
 """Context builder for discussion prompts with token budget management."""
 
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from app.utils.logger import get_logger
 from app.utils.token_counter import (
-    TokenBudget,
-    estimate_tokens,
-    check_budget,
-    get_degradation_action,
     TOKEN_ESTIMATES,
+    TokenBudget,
+    check_budget,
+    estimate_tokens,
+    get_degradation_action,
 )
 
 logger = get_logger(__name__)
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 FULL_ROLE_ROUNDS = 2
 
 
-class DiscussionMode(str, Enum):
+class DiscussionMode(StrEnum):
     """讨论模式枚举"""
 
     CODE_DOCUMENT = "code_document"
@@ -26,7 +26,7 @@ class DiscussionMode(str, Enum):
     CODE = "code"
 
 
-MODE_TEMPLATES: Dict[DiscussionMode, Dict[str, str]] = {
+MODE_TEMPLATES: dict[DiscussionMode, dict[str, str]] = {
     DiscussionMode.CODE_DOCUMENT: {
         "name": "代码文档模式",
         "description": "产出适合交给 AI 编辑器或开发人员执行的 Markdown 技术方案",
@@ -112,7 +112,7 @@ class ContextBuilder:
         self,
         max_file_tokens: int = 4000,
         max_summary_tokens: int = 1000,
-        budget: Optional[TokenBudget] = None,
+        budget: TokenBudget | None = None,
     ):
         self.max_file_tokens = max_file_tokens
         self.max_summary_tokens = max_summary_tokens
@@ -121,14 +121,14 @@ class ContextBuilder:
 
     def build_expert_prompt(
         self,
-        role: Dict[str, Any],
+        role: dict[str, Any],
         goal: str,
-        shared_sources: List[Dict[str, Any]],
+        shared_sources: list[dict[str, Any]],
         rolling_summary: str,
         current_round: int,
         total_rounds: int,
         mode: str = "code_document",
-        additional_context: Optional[str] = None,
+        additional_context: str | None = None,
     ) -> str:
         mode_enum = _parse_mode(mode)
         mode_config = MODE_TEMPLATES[mode_enum]
@@ -146,7 +146,7 @@ class ContextBuilder:
 
 ## 本次任务
 目标：{goal}
-工作模式：{mode_config['name']}
+工作模式：{mode_config["name"]}
 {round_context}
 
 ## 共享资料
@@ -156,7 +156,7 @@ class ContextBuilder:
 {rolling_summary if rolling_summary else "这是讨论的开始，还没有已有讨论。"}
 
 ## 本轮要求
-{mode_config['expert_instruction'].strip()}"""
+{mode_config["expert_instruction"].strip()}"""
 
         if additional_context:
             prompt += f"\n\n## 补充信息\n{additional_context}"
@@ -175,11 +175,11 @@ class ContextBuilder:
     def build_orchestrator_prompt(
         self,
         goal: str,
-        shared_sources: List[Dict[str, Any]],
+        shared_sources: list[dict[str, Any]],
         rolling_summary: str,
         current_round: int,
         total_rounds: int,
-        experts: List[Dict[str, Any]],
+        experts: list[dict[str, Any]],
         mode: str = "code_document",
     ) -> str:
         mode_enum = _parse_mode(mode)
@@ -205,7 +205,7 @@ class ContextBuilder:
         prompt = f"""你是专家群聊主持人。你的任务是控制讨论流程，而不是替专家完成全部内容。
 
 本次任务目标：{goal}
-当前工作模式：{mode_config['name']}（{mode_config['description']}）
+当前工作模式：{mode_config["name"]}（{mode_config["description"]}）
 当前轮次：第 {current_round}/{total_rounds} 轮
 参与专家：{expert_names}
 
@@ -235,7 +235,7 @@ class ContextBuilder:
         mode_enum = _parse_mode(mode)
         mode_config = MODE_TEMPLATES[mode_enum]
 
-        prompt = f"""你是文档专家。请根据以下讨论记录，生成一份{mode_config['output_format']}。
+        prompt = f"""你是文档专家。请根据以下讨论记录，生成一份{mode_config["output_format"]}。
 
 ## 讨论记录
 {full_discussion}
@@ -244,7 +244,7 @@ class ContextBuilder:
 请按以下结构生成文档：
 
 # {goal}
-{mode_config['synthesizer_chapters']}
+{mode_config["synthesizer_chapters"]}
 
 要求：
 - 内容必须来自讨论记录，不要编造
@@ -254,12 +254,12 @@ class ContextBuilder:
 
         return prompt
 
-    def _build_role_definition(self, role: Dict[str, Any], current_round: int) -> str:
+    def _build_role_definition(self, role: dict[str, Any], current_round: int) -> str:
         if current_round <= FULL_ROLE_ROUNDS:
             expertise = ", ".join(role.get("expertise", []))
             responsibilities = "\n".join(f"- {r}" for r in role.get("responsibilities", []))
             constraints = "\n".join(f"- {c}" for c in role.get("constraints", []))
-            return f"""你是{role['name']}，一位{role.get('description', '专家')}。
+            return f"""你是{role["name"]}，一位{role.get("description", "专家")}。
 
 ## 专业能力
 {expertise}
@@ -272,8 +272,8 @@ class ContextBuilder:
         else:
             constraints = role.get("constraints", [])
             constraint_text = constraints[0] if constraints else ""
-            return f"""你是{role['name']}。{role.get('description', '专家')}
-{f'核心约束：{constraint_text}' if constraint_text else ''}"""
+            return f"""你是{role["name"]}。{role.get("description", "专家")}
+{f"核心约束：{constraint_text}" if constraint_text else ""}"""
 
     def _build_round_context(self, current_round: int, total_rounds: int) -> str:
         context = f"当前是第 {current_round}/{total_rounds} 轮讨论。"
@@ -283,7 +283,7 @@ class ContextBuilder:
             context += "\n这是第一轮讨论，请从你的专业角度给出初步观点。"
         return context
 
-    def _build_messages_context(self, messages: Optional[List[Dict[str, Any]]]) -> str:
+    def _build_messages_context(self, messages: list[dict[str, Any]] | None) -> str:
         if not messages:
             return ""
         parts = ["## 最近讨论"]
@@ -295,7 +295,7 @@ class ContextBuilder:
             parts.append(f"[{sender}]: {content}")
         return "\n".join(parts)
 
-    def _build_decisions_context(self, decisions: Optional[List[str]]) -> str:
+    def _build_decisions_context(self, decisions: list[str] | None) -> str:
         if not decisions:
             return ""
         parts = ["## 已达成共识"]
@@ -312,17 +312,13 @@ class ContextBuilder:
                 prompt = prompt[:max_chars] + "\n\n...(内容已截断以符合Token预算)"
         return prompt
 
-    def _build_role_definition(self, role: Dict[str, Any], current_round: int) -> str:
+    def _build_role_definition(self, role: dict[str, Any], current_round: int) -> str:
         if current_round <= FULL_ROLE_ROUNDS:
             expertise = ", ".join(role.get("expertise", []))
-            responsibilities = "\n".join(
-                f"- {r}" for r in role.get("responsibilities", [])
-            )
-            constraints = "\n".join(
-                f"- {c}" for c in role.get("constraints", [])
-            )
+            responsibilities = "\n".join(f"- {r}" for r in role.get("responsibilities", []))
+            constraints = "\n".join(f"- {c}" for c in role.get("constraints", []))
 
-            return f"""你是{role['name']}，一位{role.get('description', '专家')}。
+            return f"""你是{role["name"]}，一位{role.get("description", "专家")}。
 
 ## 专业能力
 {expertise}
@@ -336,11 +332,11 @@ class ContextBuilder:
             constraints = role.get("constraints", [])
             constraint_text = constraints[0] if constraints else ""
 
-            return f"""你是{role['name']}。{role.get('description', '专家')}
-{f'核心约束：{constraint_text}' if constraint_text else ''}"""
+            return f"""你是{role["name"]}。{role.get("description", "专家")}
+{f"核心约束：{constraint_text}" if constraint_text else ""}"""
 
     def _build_file_contents_with_budget(
-        self, shared_sources: List[Dict[str, Any]], max_chars: int
+        self, shared_sources: list[dict[str, Any]], max_chars: int
     ) -> str:
         if not shared_sources:
             return ""
@@ -368,7 +364,7 @@ class ContextBuilder:
 
         return "\n\n".join(sections)
 
-    def _build_file_contents(self, shared_sources: List[Dict[str, Any]]) -> str:
+    def _build_file_contents(self, shared_sources: list[dict[str, Any]]) -> str:
         if not shared_sources:
             return ""
 
@@ -378,7 +374,6 @@ class ContextBuilder:
 
         for source in shared_sources:
             content = source.get("content", "")
-            source_type = source.get("source_type", "text")
             path = source.get("path", "粘贴的文本")
 
             if not content:
@@ -398,7 +393,7 @@ class ContextBuilder:
         return "\n\n".join(sections)
 
     def _build_file_contents_with_budget(
-        self, shared_sources: List[Dict[str, Any]], max_chars: int
+        self, shared_sources: list[dict[str, Any]], max_chars: int
     ) -> str:
         if not shared_sources:
             return ""
@@ -420,7 +415,7 @@ class ContextBuilder:
             total_chars += len(content)
         return "\n\n".join(sections)
 
-    def truncate_content(self, content: str, max_tokens: Optional[int] = None) -> str:
+    def truncate_content(self, content: str, max_tokens: int | None = None) -> str:
         max_chars = int((max_tokens or self.max_file_tokens) * self.chars_per_token)
 
         if len(content) <= max_chars:
@@ -431,7 +426,7 @@ class ContextBuilder:
     def build_rolling_summary(
         self,
         existing_summary: str,
-        new_messages: List[Dict[str, Any]],
+        new_messages: list[dict[str, Any]],
     ) -> str:
         if not new_messages:
             return existing_summary

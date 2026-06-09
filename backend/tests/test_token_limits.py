@@ -1,6 +1,5 @@
 """Tests for token limit configuration in Settings."""
 
-import pytest
 from app.config import Settings
 
 

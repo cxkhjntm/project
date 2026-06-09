@@ -1,13 +1,14 @@
 """Tests for path traversal protection utilities."""
 
 import os
-import pytest
 from pathlib import Path
+
+import pytest
 
 from app.utils.path_validator import (
     PathValidationError,
-    validate_path,
     validate_file_path,
+    validate_path,
     validate_path_safety,
 )
 

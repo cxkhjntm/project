@@ -6,8 +6,7 @@ prompts in multi-expert discussion contexts. Used by ContextBuilder to
 manage token budgets when constructing LLM prompts.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Tuple
+from dataclasses import dataclass
 
 
 @dataclass
@@ -49,7 +48,7 @@ class TokenBudget:
 # Degradation sequence: ordered actions when token budget is exceeded.
 # Each entry is (threshold_pct, action, description).
 # threshold_pct is the percentage of budget used at which this action kicks in.
-DEGRADATION_SEQUENCE: List[Tuple[int, str, str]] = [
+DEGRADATION_SEQUENCE: list[tuple[int, str, str]] = [
     (80, "compress_context", "Compress context summary to key points"),
     (85, "trim_shared_data", "Remove low-relevance shared data snippets"),
     (90, "reduce_expert_memory", "Trim older expert memory entries"),
@@ -130,8 +129,7 @@ def estimate_round_tokens(round_number: int, expert_count: int) -> int:
     """
     base = TOKEN_ESTIMATES["round_overhead_tokens"]
     per_expert = (
-        TOKEN_ESTIMATES["expert_overhead_tokens"]
-        + TOKEN_ESTIMATES["message_overhead_tokens"] * 2
+        TOKEN_ESTIMATES["expert_overhead_tokens"] + TOKEN_ESTIMATES["message_overhead_tokens"] * 2
     )
     # Later rounds may reference more history, add a small ramp
     round_multiplier = 1.0 + (round_number - 1) * 0.05
@@ -151,9 +149,7 @@ def estimate_total_tokens(rounds: int, expert_count: int) -> int:
     Returns:
         Estimated total tokens for the full discussion.
     """
-    return sum(
-        estimate_round_tokens(r, expert_count) for r in range(1, rounds + 1)
-    )
+    return sum(estimate_round_tokens(r, expert_count) for r in range(1, rounds + 1))
 
 
 def check_budget(current_tokens: int, budget: TokenBudget) -> dict:
@@ -181,7 +177,7 @@ def check_budget(current_tokens: int, budget: TokenBudget) -> dict:
     }
 
 
-def get_degradation_action(current_tokens: int, budget: TokenBudget) -> Tuple[str, str] | None:
+def get_degradation_action(current_tokens: int, budget: TokenBudget) -> tuple[str, str] | None:
     """Determine the appropriate degradation action for current token usage.
 
     Walks the DEGRADATION_SEQUENCE from highest threshold down and returns

@@ -1,13 +1,20 @@
 """Tests for discussion API endpoints."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.room import Room, RoomParticipant
-from app.routers.discussion import start_discussion, get_messages, stream_messages, control_discussion, get_discussion_status
-from app.schemas.discussion import DiscussionControlRequest, DiscussionAction
+from app.routers.discussion import (
+    control_discussion,
+    get_discussion_status,
+    get_messages,
+    start_discussion,
+    stream_messages,
+)
+from app.schemas.discussion import DiscussionAction, DiscussionControlRequest
 
 
 @pytest.fixture
@@ -198,7 +205,7 @@ async def test_control_discussion_stop_from_running(sample_room):
 
     result = await control_discussion("test-room-id", request, session)
 
-    assert result["status"] == "completed"
+    assert result["status"] == "stopped"
     assert result["action"] == "stop"
 
 
@@ -210,7 +217,7 @@ async def test_control_discussion_stop_from_paused(sample_room):
 
     result = await control_discussion("test-room-id", request, session)
 
-    assert result["status"] == "completed"
+    assert result["status"] == "stopped"
     assert result["action"] == "stop"
 
 

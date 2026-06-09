@@ -68,8 +68,40 @@ def build_rolling_summary(
     max_chars = self.max_summary_tokens * self.chars_per_token
     if len(combined) > max_chars:
         # 优先保留第一轮和最新讨论，截断历史摘要
-        # 实现细节...
-        pass
+        # 计算第一轮和最新讨论的长度
+        first_round_len = len(sections[0]) if first_round_messages else 0
+        latest_len = len(sections[-1]) if new_messages else 0
+        
+        # 计算可用于历史摘要的空间
+        available_for_history = max_chars - first_round_len - latest_len - 4  # 4 for separators
+        
+        if available_for_history > 0 and existing_summary:
+            # 截断历史摘要
+            truncated_history = existing_summary[:available_for_history] + "..."
+            sections[1] = f"## 历史讨论摘要\n{truncated_history}"
+        elif existing_summary:
+            # 如果没有空间给历史摘要，移除它
+            sections.pop(1)
+        
+        combined = "\n\n".join(sections)
+        
+        # 如果仍然超过限制，截断最新讨论
+        if len(combined) > max_chars:
+            available_for_latest = max_chars - first_round_len - 4
+            if available_for_latest > 100 and new_messages:
+                truncated_latest = ""
+                for msg in new_messages:
+                    sender = msg.get("sender_id", msg.get("sender_type", "未知"))
+                    content = msg.get("content", "")
+                    if len(content) > 200:
+                        content = content[:200] + "..."
+                    line = f"[{sender}]: {content}\n"
+                    if len(truncated_latest) + len(line) <= available_for_latest:
+                        truncated_latest += line
+                    else:
+                        break
+                sections[-1] = f"## 最新讨论\n{truncated_latest.rstrip()}"
+                combined = "\n\n".join(sections)
     
     return combined
 ```

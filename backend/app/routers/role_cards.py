@@ -1,7 +1,5 @@
 """Role card API endpoints."""
 
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,11 +25,11 @@ async def create_role_card(
     return RoleCardResponse.model_validate(role_card)
 
 
-@router.get("", response_model=List[RoleCardResponse])
+@router.get("", response_model=list[RoleCardResponse])
 async def list_role_cards(
-    builtin: Optional[bool] = Query(None, description="Filter by built-in status"),
+    builtin: bool | None = Query(None, description="Filter by built-in status"),
     session: AsyncSession = Depends(get_session),
-) -> List[RoleCardResponse]:
+) -> list[RoleCardResponse]:
     """List all role cards."""
     role_cards = await role_card_service.get_all(session, builtin_only=builtin or False)
     return [RoleCardResponse.model_validate(rc) for rc in role_cards]
@@ -46,7 +44,7 @@ async def get_role_card(
     role_card = await role_card_service.get_by_id(session, role_card_id)
     if not role_card:
         raise HTTPException(status_code=404, detail="Role card not found")
-    
+
     return RoleCardResponse.model_validate(role_card)
 
 
@@ -61,10 +59,10 @@ async def update_role_card(
         role_card = await role_card_service.update(session, role_card_id, data)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    
+
     if not role_card:
         raise HTTPException(status_code=404, detail="Role card not found")
-    
+
     return RoleCardResponse.model_validate(role_card)
 
 
@@ -78,7 +76,7 @@ async def delete_role_card(
         deleted = await role_card_service.delete(session, role_card_id)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    
+
     if not deleted:
         raise HTTPException(status_code=404, detail="Role card not found")
 
@@ -93,5 +91,5 @@ async def copy_role_card(
     role_card = await role_card_service.copy(session, role_card_id, data.new_name)
     if not role_card:
         raise HTTPException(status_code=404, detail="Role card not found")
-    
+
     return RoleCardResponse.model_validate(role_card)

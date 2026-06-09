@@ -8,6 +8,7 @@ import type {
   CostUpdateEvent,
   UseDiscussionSSEReturn,
 } from '../types/discussion';
+import { API_BASE } from '../api/client';
 
 interface ArtifactInfo {
   id: string;
@@ -56,7 +57,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     (roomId: string) => {
       closeConnection();
 
-      const url = `/api/rooms/${roomId}/start`;
+      const url = `${API_BASE}/rooms/${roomId}/start`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 

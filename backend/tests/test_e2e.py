@@ -1,6 +1,6 @@
-import pytest
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -42,7 +42,6 @@ async def client(test_db_session: AsyncSession) -> AsyncGenerator[AsyncClient, N
 
 
 class TestEndToEndFlow:
-
     @pytest.mark.asyncio
     async def test_full_flow_provider_to_room(self, client: AsyncClient) -> None:
         """create provider -> get role cards -> create room -> verify room"""
@@ -128,6 +127,16 @@ class TestEndToEndFlow:
         assert fetched_room["participants"][0]["role_card_id"] == role_card_ids[0]
         assert fetched_room["participants"][0]["provider_id"] == provider_id
 
+        message_response = await client.post(
+            f"/api/rooms/{room_id}/messages",
+            json={"content": "请重点关注边界条件"},
+        )
+        assert message_response.status_code == 201
+        message_data = message_response.json()
+        assert message_data["room_id"] == room_id
+        assert message_data["sender_type"] == "user"
+        assert message_data["content"] == "请重点关注边界条件"
+
     @pytest.mark.asyncio
     async def test_provider_appears_in_list_after_creation(self, client: AsyncClient) -> None:
         """created provider appears in GET /api/providers"""
@@ -176,9 +185,7 @@ class TestEndToEndFlow:
                 "strategy": "standard",
                 "output_directory": "/tmp/list-test",
                 "round_limit": 3,
-                "participants": [
-                    {"role_card_id": role_card_id, "provider_id": provider_id}
-                ],
+                "participants": [{"role_card_id": role_card_id, "provider_id": provider_id}],
             },
         )
         assert create_response.status_code == 201

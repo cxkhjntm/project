@@ -2,7 +2,7 @@
 
 import os
 import uuid
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -77,7 +77,10 @@ class TestFolderPathTraversalRejection:
             },
         )
         assert response.status_code == 400
-        assert "traversal" in response.json()["message"].lower() or "invalid" in response.json()["message"].lower()
+        assert (
+            "traversal" in response.json()["message"].lower()
+            or "invalid" in response.json()["message"].lower()
+        )
 
     @pytest.mark.asyncio
     async def test_rejects_relative_dot_dot_traversal(
@@ -142,6 +145,7 @@ class TestValidFolderPathAccepted:
             assert data["source_type"] == "folder"
         finally:
             import shutil
+
             shutil.rmtree(test_dir, ignore_errors=True)
 
 
@@ -156,7 +160,7 @@ class TestFileSourceNotAffected:
         await test_db_session.commit()
 
         file_content = b"test file content"
-        
+
         response = await client.post(
             f"/api/rooms/{sample_room.id}/sources",
             data={
@@ -194,7 +198,7 @@ class TestFileSourceNotAffected:
         await test_db_session.commit()
 
         file_content = b"test content"
-        
+
         response = await client.post(
             f"/api/rooms/{sample_room.id}/sources",
             data={

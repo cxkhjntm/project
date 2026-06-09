@@ -1,7 +1,5 @@
 """Provider API endpoints."""
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,10 +39,10 @@ async def create_provider(
     )
 
 
-@router.get("", response_model=List[ProviderResponse])
+@router.get("", response_model=list[ProviderResponse])
 async def list_providers(
     session: AsyncSession = Depends(get_session),
-) -> List[ProviderResponse]:
+) -> list[ProviderResponse]:
     providers = await provider_service.get_all(session)
     result = []
     for p in providers:
@@ -52,20 +50,22 @@ async def list_providers(
             masked = crypto_service.mask_key(crypto_service.decrypt(p.api_key_encrypted))
         except Exception:
             masked = "***"
-        result.append(ProviderResponse(
-            id=p.id,
-            name=p.name,
-            type=p.type,
-            base_url=p.base_url,
-            api_key_masked=masked,
-            default_model=p.default_model,
-            default_temperature=p.default_temperature,
-            default_max_input_tokens=p.default_max_input_tokens,
-            default_max_output_tokens=p.default_max_output_tokens,
-            enabled=p.enabled,
-            created_at=p.created_at,
-            updated_at=p.updated_at,
-        ))
+        result.append(
+            ProviderResponse(
+                id=p.id,
+                name=p.name,
+                type=p.type,
+                base_url=p.base_url,
+                api_key_masked=masked,
+                default_model=p.default_model,
+                default_temperature=p.default_temperature,
+                default_max_input_tokens=p.default_max_input_tokens,
+                default_max_output_tokens=p.default_max_output_tokens,
+                enabled=p.enabled,
+                created_at=p.created_at,
+                updated_at=p.updated_at,
+            )
+        )
     return result
 
 
@@ -77,12 +77,12 @@ async def get_provider(
     provider = await provider_service.get_by_id(session, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    
+
     try:
         masked = crypto_service.mask_key(crypto_service.decrypt(provider.api_key_encrypted))
     except Exception:
         masked = "***"
-    
+
     return ProviderResponse(
         id=provider.id,
         name=provider.name,
@@ -108,12 +108,12 @@ async def update_provider(
     provider = await provider_service.update(session, provider_id, data)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    
+
     try:
         masked = crypto_service.mask_key(crypto_service.decrypt(provider.api_key_encrypted))
     except Exception:
         masked = "***"
-    
+
     return ProviderResponse(
         id=provider.id,
         name=provider.name,

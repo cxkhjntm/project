@@ -23,9 +23,7 @@ async def load_builtin_roles(session: AsyncSession) -> list[RoleCard]:
     Returns:
         List of loaded role cards (empty if already loaded)
     """
-    result = await session.execute(
-        select(RoleCard).where(RoleCard.is_builtin).limit(1)
-    )
+    result = await session.execute(select(RoleCard).where(RoleCard.is_builtin).limit(1))
     if result.scalar_one_or_none() is not None:
         logger.info("Built-in roles already loaded, skipping")
         return []

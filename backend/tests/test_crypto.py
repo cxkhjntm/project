@@ -1,8 +1,9 @@
 """Tests for crypto service."""
 
-import pytest
-from cryptography.fernet import Fernet, InvalidToken
 from unittest.mock import patch
+
+import pytest
+from cryptography.fernet import Fernet
 
 from app.services.crypto import CryptoService
 

@@ -3,7 +3,7 @@
  * Uses the Vite proxy (/api -> http://localhost:8000) in development.
  */
 
-const API_BASE = '/api';
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -56,8 +56,9 @@ class ApiClient {
         detail: response.statusText,
       }));
       throw new ApiError(
-        error.detail || 'An error occurred',
-        response.status
+        formatApiError(error, response.statusText),
+        response.status,
+        error.request_id
       );
     }
 
@@ -185,7 +186,7 @@ class ApiClient {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new ApiError(error.detail || 'Upload failed', response.status);
+      throw new ApiError(formatApiError(error, 'Upload failed'), response.status, error.request_id);
     }
     return response.json();
   }
@@ -205,7 +206,7 @@ class ApiClient {
   async controlDiscussion(
     roomId: string,
     action: 'start' | 'pause' | 'resume' | 'stop'
-  ): Promise<{ message: string }> {
+  ): Promise<{ status: string; action: string }> {
     return this.request(`/rooms/${roomId}/control`, {
       method: 'POST',
       body: { action },
@@ -247,12 +248,47 @@ class ApiClient {
 // Custom error class
 export class ApiError extends Error {
   status: number;
+  requestId?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, requestId?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.requestId = requestId;
   }
+}
+
+function formatApiError(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback;
+  }
+
+  const record = error as Record<string, unknown>;
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message;
+  }
+
+  if (typeof record.detail === 'string' && record.detail.trim()) {
+    return record.detail;
+  }
+
+  if (Array.isArray(record.detail)) {
+    return record.detail
+      .map((item) => {
+        if (!item || typeof item !== 'object') return String(item);
+        const detail = item as Record<string, unknown>;
+        const location = Array.isArray(detail.loc) ? detail.loc.join('.') : '';
+        const message = typeof detail.msg === 'string' ? detail.msg : JSON.stringify(detail);
+        return location ? `${location}: ${message}` : message;
+      })
+      .join('; ');
+  }
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error;
+  }
+
+  return fallback;
 }
 
 // Singleton instance

@@ -9,7 +9,7 @@ export async function synthesize(
     `/rooms/${roomId}/synthesize`,
     {
       method: 'POST',
-      body: title ? { title } : undefined,
+      body: title ? { title } : {},
     }
   );
 }

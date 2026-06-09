@@ -9,6 +9,8 @@ const MODE_DESCRIPTIONS: Record<RoomMode, string> = {
   code: '产出核心代码草案，用于快速判断技术方向是否可行',
 };
 
+const MAX_DISCUSSION_ROUNDS = 20;
+
 interface RoomFormProps {
   onSubmit: (data: RoomCreate) => Promise<void>;
   onCancel: () => void;
@@ -153,7 +155,7 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
           <input
             type="range"
             min={1}
-            max={50}
+            max={MAX_DISCUSSION_ROUNDS}
             value={roundLimit}
             onChange={e => setRoundLimit(Number(e.target.value))}
             className="flex-1"
@@ -161,11 +163,11 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
           <input
             type="number"
             min={1}
-            max={50}
+            max={MAX_DISCUSSION_ROUNDS}
             value={roundLimit}
             onChange={e => {
               const v = Number(e.target.value);
-              if (v >= 1 && v <= 50) setRoundLimit(v);
+              if (v >= 1 && v <= MAX_DISCUSSION_ROUNDS) setRoundLimit(v);
             }}
             className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
