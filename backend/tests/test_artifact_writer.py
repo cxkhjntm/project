@@ -2,6 +2,8 @@
 
 import os
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -338,6 +340,81 @@ class TestGenerateArtifact:
         assert "## 4. 总体方案" in content
         assert "专家 (role-architect): I recommend using a RESTful design with FastAPI." in content
         assert "专家 (role-pm): We should focus on MVP scope first." in content
+
+    async def test_llm_synthesis_generates_final_without_raw_discussion(
+        self, writer, sample_messages, output_dir, db_session
+    ):
+        """LLM synthesis should write a final deliverable while full logs stay separate."""
+        from app.models.room import Room
+
+        room = Room(
+            id="room-llm",
+            name="LLM Room",
+            goal="Produce real final doc",
+            output_directory=output_dir,
+        )
+        db_session.add(room)
+        await db_session.flush()
+
+        client = SimpleNamespace(
+            chat_completion=AsyncMock(
+                return_value=SimpleNamespace(
+                    content="# Produce real final doc\n\n## 决策摘要\n- Use FastAPI for the API."
+                )
+            )
+        )
+        writer._build_synthesis_client = AsyncMock(return_value=client)
+
+        result = await writer.generate_artifact(
+            room_id="room-llm",
+            room_name="LLM Room",
+            goal="Produce real final doc",
+            messages=sample_messages,
+            output_directory=output_dir,
+        )
+
+        assert result.fallback_used is False
+        assert result.final_artifact.artifact_kind == "final"
+        assert result.discussion_log.artifact_kind == "discussion_log"
+
+        with open(result.final_artifact.file_path, encoding="utf-8") as f:
+            final_content = f.read()
+        with open(result.discussion_log.file_path, encoding="utf-8") as f:
+            log_content = f.read()
+
+        assert "Use FastAPI for the API" in final_content
+        assert "Welcome to the discussion" not in final_content
+        assert "Welcome to the discussion" in log_content
+
+    async def test_fallback_marks_summary_and_still_writes_log(
+        self, writer, sample_messages, output_dir, db_session
+    ):
+        """Fallback generation should still produce both files and mark fallback=true."""
+        from app.models.room import Room
+
+        room = Room(
+            id="room-fallback",
+            name="Fallback Room",
+            goal="Fallback generation",
+            output_directory=output_dir,
+        )
+        db_session.add(room)
+        await db_session.flush()
+
+        writer._build_synthesis_client = AsyncMock(return_value=None)
+
+        result = await writer.generate_artifact(
+            room_id="room-fallback",
+            room_name="Fallback Room",
+            goal="Fallback generation",
+            messages=sample_messages,
+            output_directory=output_dir,
+        )
+
+        assert result.fallback_used is True
+        assert "fallback=true" in result.final_artifact.summary
+        assert os.path.isfile(result.final_artifact.file_path)
+        assert os.path.isfile(result.discussion_log.file_path)
 
     async def test_repeated_generation_uses_unique_directories(
         self, writer, sample_messages, output_dir, db_session

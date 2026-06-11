@@ -27,6 +27,12 @@ class Artifact(Base):
         String(50),
         nullable=False,  # 'markdown' | 'text' | 'code' | 'csv'
     )
+    artifact_kind: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="final",
+        server_default="final",  # 'final' | 'discussion_log'
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -57,13 +57,14 @@ async def synthesize_artifact(
 
     writer = ArtifactWriter(session)
     try:
-        artifact = await writer.generate_artifact(
+        result = await writer.generate_artifact(
             room_id=room_id,
             room_name=request.title or room.name,
             goal=room.goal,
             messages=message_dicts,
             output_directory=room.output_directory,
             mode=room.mode,
+            max_length=request.max_length,
         )
     except ArtifactWriterError as e:
         logger.error("Artifact generation failed", error=str(e))
@@ -73,15 +74,18 @@ async def synthesize_artifact(
 
     content_preview = None
     try:
-        with open(artifact.file_path, encoding="utf-8") as f:
+        with open(result.final_artifact.file_path, encoding="utf-8") as f:
             content = f.read()
             content_preview = content[:500]
     except OSError:
         pass
 
     return SynthesizeResponse(
-        artifact=ArtifactResponse.model_validate(artifact),
-        content_preview=content_preview,
+        artifact=ArtifactResponse.model_validate(result.final_artifact),
+        artifacts=[ArtifactResponse.model_validate(a) for a in result.artifacts],
+        discussion_log=ArtifactResponse.model_validate(result.discussion_log),
+        fallback_used=result.fallback_used,
+        content_preview=content_preview or result.content_preview,
         message="Artifact generated successfully",
     )
 

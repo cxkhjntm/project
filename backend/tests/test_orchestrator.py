@@ -556,13 +556,28 @@ async def test_auto_generate_artifact_uses_user_messages_from_database():
     ):
         mock_message_service.get_by_room = AsyncMock(return_value=db_messages)
         writer = MagicMock()
+        final_artifact = SimpleNamespace(
+            id="artifact-1",
+            title="Result",
+            file_path="/tmp/out/result.md",
+            artifact_type="markdown",
+            artifact_kind="final",
+            summary=None,
+        )
+        discussion_log = SimpleNamespace(
+            id="artifact-log",
+            title="Result 讨论记录",
+            file_path="/tmp/out/discussion-log.md",
+            artifact_type="markdown",
+            artifact_kind="discussion_log",
+            summary=None,
+        )
         writer.generate_artifact = AsyncMock(
             return_value=SimpleNamespace(
-                id="artifact-1",
-                title="Result",
-                file_path="/tmp/out/result.md",
-                artifact_type="markdown",
-                summary=None,
+                final_artifact=final_artifact,
+                discussion_log=discussion_log,
+                artifacts=[final_artifact, discussion_log],
+                fallback_used=False,
             )
         )
         artifact_writer_cls.return_value = writer
@@ -599,21 +614,30 @@ def test_parse_host_action_synthesize():
 
 
 def test_parse_host_action_next():
-    """Test parsing ACTION: next:expert_id from host message."""
+    """Legacy ACTION: next should be treated as focus."""
     content = "请下一位发言，ACTION: next:expert_1"
     action = parse_host_action(content)
     assert action is not None
-    assert action["type"] == "next"
-    assert action["expert_id"] == "expert_1"
+    assert action["type"] == "focus"
+    assert action["expert_ids"] == ["expert_1"]
 
 
 def test_parse_host_action_next_chinese_name():
-    """Test parsing ACTION: next with Chinese expert names."""
+    """Legacy ACTION: next with Chinese names should be treated as focus."""
     content = "请后端工程师继续补充，ACTION: next:后端工程师"
     action = parse_host_action(content)
     assert action is not None
-    assert action["type"] == "next"
-    assert action["expert_id"] == "后端工程师"
+    assert action["type"] == "focus"
+    assert action["expert_ids"] == ["后端工程师"]
+
+
+def test_parse_host_action_focus_multiple_experts():
+    """Test parsing ACTION: focus with multiple experts."""
+    content = "本轮重点看前后端协作，ACTION: focus:后端工程师,前端工程师"
+    action = parse_host_action(content)
+    assert action is not None
+    assert action["type"] == "focus"
+    assert action["expert_ids"] == ["后端工程师", "前端工程师"]
 
 
 def test_parse_host_action_none():
@@ -744,8 +768,8 @@ async def test_action_synthesize_stops_discussion():
 
 
 @pytest.mark.asyncio
-async def test_action_next_runs_selected_expert_only():
-    """Test that ACTION: next only runs the selected expert."""
+async def test_action_focus_runs_all_experts_with_focused_first():
+    """Test that ACTION: focus prioritizes selected experts but still runs all experts."""
     mock_session = AsyncMock()
     mock_on_event = AsyncMock()
     backend_role = MagicMock()
@@ -774,7 +798,7 @@ async def test_action_next_runs_selected_expert_only():
 
     orchestrator = Orchestrator(session=mock_session, room=room, on_event=mock_on_event)
     orchestrator._run_orchestrator_turn = AsyncMock(
-        return_value="请后端先补充，ACTION: next:后端工程师"
+        return_value="请后端先补充，ACTION: focus:后端工程师"
     )
     orchestrator._run_expert_turn = AsyncMock()
     orchestrator._update_rolling_summary = AsyncMock()
@@ -785,9 +809,13 @@ async def test_action_next_runs_selected_expert_only():
     result = await orchestrator.run_discussion()
 
     assert result["success"] is True
-    assert orchestrator._run_expert_turn.call_count == 1
-    called_participant = orchestrator._run_expert_turn.call_args[0][0]
-    assert called_participant["name"] == "后端工程师"
+    assert orchestrator._run_expert_turn.call_count == 2
+    first_call = orchestrator._run_expert_turn.call_args_list[0]
+    second_call = orchestrator._run_expert_turn.call_args_list[1]
+    assert first_call.args[0]["name"] == "后端工程师"
+    assert first_call.args[2] is True
+    assert second_call.args[0]["name"] == "前端工程师"
+    assert second_call.args[2] is False
 
 
 @pytest.mark.asyncio

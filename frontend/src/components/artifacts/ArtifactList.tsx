@@ -27,6 +27,11 @@ export default function ArtifactList({ artifacts, onView }: ArtifactListProps) {
     <div className="space-y-3">
       {artifacts.map((artifact) => {
         const typeInfo = artifactTypeLabels[artifact.artifact_type] || artifactTypeLabels.text;
+        const kindLabel = artifact.artifact_kind === 'discussion_log' ? '讨论记录' : '最终产物';
+        const kindClass =
+          artifact.artifact_kind === 'discussion_log'
+            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+            : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
         return (
           <div
             key={artifact.id}
@@ -42,6 +47,9 @@ export default function ArtifactList({ artifacts, onView }: ArtifactListProps) {
                     </h4>
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 flex-shrink-0">
                       {typeInfo.label}
+                    </span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${kindClass}`}>
+                      {kindLabel}
                     </span>
                   </div>
                   {artifact.summary && (

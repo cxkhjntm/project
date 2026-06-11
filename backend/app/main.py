@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import async_session_factory, init_db
+from app.database import async_session_factory, init_db, migrate_compat_schema
 from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_handler
 from app.models import *  # noqa: F401, F403 - ensure all models registered with Base
 from app.routers import artifacts, discussion, filesystem, providers, role_cards, rooms, sources
@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting Expert Room API", version="0.1.0", debug=settings.debug)
     await init_db()
+    await migrate_compat_schema()
 
     async with async_session_factory() as session:
         await load_builtin_roles(session)

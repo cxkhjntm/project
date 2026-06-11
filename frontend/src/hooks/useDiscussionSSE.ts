@@ -9,18 +9,15 @@ import type {
   UseDiscussionSSEReturn,
   DoneEvent,
 } from '../types/discussion';
+import type { Artifact } from '../types';
 import { API_BASE, apiClient } from '../api/client';
 
-interface ArtifactInfo {
-  id: string;
-  title: string;
-  file_path: string;
-  artifact_type: string;
-  summary: string | null;
-}
-
 export function useDiscussionSSE(): UseDiscussionSSEReturn & {
-  artifact: ArtifactInfo | null;
+  artifact: Artifact | null;
+  artifacts: Artifact[];
+  discussionLog: Artifact | null;
+  fallbackUsed: boolean;
+  streamingScrollTick: number;
 } {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [thinking, setThinking] = useState<Record<string, boolean>>({});
@@ -32,10 +29,16 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
   const [totalRounds, setTotalRounds] = useState(0);
   const [totalTokens, setTotalTokens] = useState(0);
   const [startTimestamp, setStartTimestamp] = useState<number | null>(null);
-  const [artifact, setArtifact] = useState<ArtifactInfo | null>(null);
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [discussionLog, setDiscussionLog] = useState<Artifact | null>(null);
+  const [fallbackUsed, setFallbackUsed] = useState(false);
+  const [streamingScrollTick, setStreamingScrollTick] = useState(0);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tokenFlushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tokenBufferRef = useRef<Record<string, string>>({});
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 3;
 
@@ -48,6 +51,26 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     });
   }, []);
 
+  const clearTokenBuffer = useCallback(() => {
+    tokenBufferRef.current = {};
+    if (tokenFlushTimeoutRef.current) {
+      clearTimeout(tokenFlushTimeoutRef.current);
+      tokenFlushTimeoutRef.current = null;
+    }
+    setStreamingMessages({});
+  }, []);
+
+  const flushTokenBuffer = useCallback(() => {
+    tokenFlushTimeoutRef.current = null;
+    setStreamingMessages({ ...tokenBufferRef.current });
+    setStreamingScrollTick((value) => value + 1);
+  }, []);
+
+  const scheduleTokenFlush = useCallback(() => {
+    if (tokenFlushTimeoutRef.current) return;
+    tokenFlushTimeoutRef.current = setTimeout(flushTokenBuffer, 100);
+  }, [flushTokenBuffer]);
+
   const closeConnection = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -56,6 +79,10 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+    if (tokenFlushTimeoutRef.current) {
+      clearTimeout(tokenFlushTimeoutRef.current);
+      tokenFlushTimeoutRef.current = null;
     }
   }, []);
 
@@ -102,10 +129,8 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
       eventSource.addEventListener('token', (event) => {
         try {
           const data: TokenEvent = JSON.parse(event.data);
-          setStreamingMessages((prev) => ({
-            ...prev,
-            [data.role]: (prev[data.role] || '') + data.content,
-          }));
+          tokenBufferRef.current[data.role] = (tokenBufferRef.current[data.role] || '') + data.content;
+          scheduleTokenFlush();
         } catch (e) {
           console.error('Parse token error:', e);
         }
@@ -117,13 +142,14 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
           appendMessage(data);
 
           if (data.sender_type === 'orchestrator') {
+            delete tokenBufferRef.current['主持人'];
             setStreamingMessages((prev) => {
               const next = { ...prev };
               delete next['主持人'];
               return next;
             });
           } else {
-            setStreamingMessages({});
+            clearTokenBuffer();
           }
 
           // 清除 thinking 状态：
@@ -170,8 +196,17 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
         try {
           const data = JSON.parse(event.data);
           if (data.artifact) {
-            setArtifact(data.artifact as ArtifactInfo);
+            setArtifact(data.artifact as Artifact);
           }
+          if (Array.isArray(data.artifacts)) {
+            setArtifacts(data.artifacts as Artifact[]);
+          } else if (data.artifact) {
+            setArtifacts([data.artifact as Artifact]);
+          }
+          if (data.discussion_log) {
+            setDiscussionLog(data.discussion_log as Artifact);
+          }
+          setFallbackUsed(Boolean(data.fallback_used));
         } catch (e) {
           console.error('Failed to parse artifact event:', e);
         }
@@ -195,7 +230,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
           setIsComplete(true);
           setStatus(data.status || 'completed');
           setThinking({});
-          setStreamingMessages({});
+          clearTokenBuffer();
           closeConnection();
         } catch (e) {
           console.error('Failed to parse done event:', e);
@@ -214,7 +249,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
         }
       };
     },
-    [appendMessage, closeConnection, startTimestamp],
+    [appendMessage, clearTokenBuffer, closeConnection, scheduleTokenFlush, startTimestamp],
   );
 
   const loadHistory = useCallback(
@@ -250,9 +285,12 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
         setTotalTokens(0);
         setStartTimestamp(null);
         setArtifact(null);
+        setArtifacts([]);
+        setDiscussionLog(null);
+        setFallbackUsed(false);
       }
       setThinking({});
-      setStreamingMessages({});
+      clearTokenBuffer();
       setError(null);
       setIsComplete(false);
       setStatus(options.initialStatus || 'connecting');
@@ -265,14 +303,14 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
         connect(roomId);
       }
     },
-    [connect, loadHistory],
+    [clearTokenBuffer, connect, loadHistory],
   );
 
   const reset = useCallback(() => {
     closeConnection();
     setMessages([]);
     setThinking({});
-    setStreamingMessages({});
+    clearTokenBuffer();
     setError(null);
     setIsComplete(false);
     setStatus('idle');
@@ -281,8 +319,11 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     setTotalTokens(0);
     setStartTimestamp(null);
     setArtifact(null);
+    setArtifacts([]);
+    setDiscussionLog(null);
+    setFallbackUsed(false);
     reconnectAttemptsRef.current = 0;
-  }, [closeConnection]);
+  }, [clearTokenBuffer, closeConnection]);
 
   return {
     messages,
@@ -300,5 +341,9 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     appendMessage,
     reset,
     artifact,
+    artifacts,
+    discussionLog,
+    fallbackUsed,
+    streamingScrollTick,
   };
 }

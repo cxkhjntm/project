@@ -32,6 +32,7 @@ class ArtifactResponse(BaseModel):
     id: str
     room_id: str
     artifact_type: str
+    artifact_kind: str = Field("final", description="Artifact kind: final or discussion_log")
     title: str
     file_path: str
     summary: str | None = None
@@ -60,5 +61,8 @@ class SynthesizeResponse(BaseModel):
     """Schema for synthesize endpoint response."""
 
     artifact: ArtifactResponse
+    artifacts: list[ArtifactResponse] = Field(default_factory=list)
+    discussion_log: ArtifactResponse | None = None
+    fallback_used: bool = False
     content_preview: str | None = Field(None, description="First 500 chars of generated content")
     message: str = Field("Artifact generated successfully", description="Status message")

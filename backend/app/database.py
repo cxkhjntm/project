@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -39,4 +40,25 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-__all__ = ["Base", "engine", "async_session_factory", "get_session", "init_db"]
+async def migrate_compat_schema() -> None:
+    """Apply small SQLite compatibility migrations for existing local databases."""
+    async with engine.begin() as conn:
+        if conn.dialect.name != "sqlite":
+            return
+
+        result = await conn.execute(text("PRAGMA table_info(artifacts)"))
+        columns = {row[1] for row in result.fetchall()}
+        if columns and "artifact_kind" not in columns:
+            await conn.execute(
+                text("ALTER TABLE artifacts ADD COLUMN artifact_kind TEXT NOT NULL DEFAULT 'final'")
+            )
+
+
+__all__ = [
+    "Base",
+    "engine",
+    "async_session_factory",
+    "get_session",
+    "init_db",
+    "migrate_compat_schema",
+]

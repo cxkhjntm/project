@@ -58,6 +58,10 @@ export default function DiscussionPage() {
     appendMessage,
     reset,
     artifact,
+    artifacts,
+    discussionLog,
+    fallbackUsed,
+    streamingScrollTick,
   } = useDiscussionSSE();
 
   const {
@@ -145,7 +149,7 @@ export default function DiscussionPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length, streamingScrollTick]);
 
   const handleStartDiscussion = useCallback(async () => {
     if (!roomId) return;
@@ -213,6 +217,37 @@ export default function DiscussionPage() {
     [roomId, appendMessage],
   );
 
+  const messageElements = useMemo(() => {
+    const elements: React.ReactNode[] = [];
+    let lastRound = 0;
+    const seenInRound = new Set<string>();
+
+    messages.forEach((msg) => {
+      if (msg.round !== lastRound) {
+        if (msg.round > 1) {
+          elements.push(<RoundDivider key={`round-${msg.round}`} round={msg.round} />);
+        }
+        lastRound = msg.round;
+        seenInRound.clear();
+      }
+
+      const speakerKey = `${msg.round}:${msg.sender_type}:${msg.sender_id || ''}`;
+      const isFirstInRound = !seenInRound.has(speakerKey);
+      seenInRound.add(speakerKey);
+
+      elements.push(
+        <MessageBubble
+          key={msg.id}
+          message={msg}
+          showExpertiseBadge={isFirstInRound}
+          participantNameMap={participantNameMap}
+        />
+      );
+    });
+
+    return elements;
+  }, [messages, participantNameMap]);
+
   if (!roomId) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -235,34 +270,6 @@ export default function DiscussionPage() {
   const thinkingRoles = Object.entries(thinking)
     .filter(([, isThinking]) => isThinking)
     .map(([role]) => role);
-
-  // 修复 RoundDivider 逻辑：
-  // lastRound 初始化为 0（与 round 从 1 开始一致）
-  // 无论是否渲染分隔线，都要更新 lastRound，避免状态不同步
-  const messageElements: React.ReactNode[] = [];
-  let lastRound = 0;
-
-  messages.forEach((msg, index) => {
-    if (msg.round !== lastRound) {
-      if (msg.round > 1) {
-        messageElements.push(<RoundDivider key={`round-${msg.round}`} round={msg.round} />);
-      }
-      lastRound = msg.round;
-    }
-
-    const isFirstInRound = !messages
-      .slice(0, index)
-      .some((m) => m.round === msg.round && m.sender_id === msg.sender_id && m.sender_type === msg.sender_type);
-
-    messageElements.push(
-      <MessageBubble
-        key={msg.id}
-        message={msg}
-        showExpertiseBadge={isFirstInRound}
-        participantNameMap={participantNameMap}
-      />
-    );
-  });
 
   const currentRoomStatus = controlStatus?.status || roomData?.status || 'draft';
   const displayStatus = status === 'idle' ? currentRoomStatus : status;
@@ -524,6 +531,11 @@ export default function DiscussionPage() {
                     <p className="text-xs text-emerald-600 mt-0.5">
                       {artifact.title} · {artifact.artifact_type}
                     </p>
+                    <p className="text-xs text-emerald-600 mt-0.5">
+                      已生成 {artifacts.length || 1} 个文件
+                      {discussionLog ? ' · 含讨论记录' : ''}
+                      {fallbackUsed ? ' · 已使用模板兜底' : ''}
+                    </p>
                     {artifact.file_path && (
                       <p className="text-xs text-emerald-500 mt-1 font-mono truncate" title={artifact.file_path}>
                         📂 {artifact.file_path}
@@ -632,7 +644,7 @@ export default function DiscussionPage() {
                             {a.title || `产出物 ${index + 1}`}
                           </p>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            {a.artifact_type || '未知类型'}
+                            {a.artifact_kind === 'discussion_log' ? '讨论记录' : '最终产物'} · {a.artifact_type || '未知类型'}
                             {a.created_at && ` · ${new Date(a.created_at).toLocaleString('zh-CN')}`}
                           </p>
                           {a.file_path && (

@@ -133,6 +133,10 @@ class TestSynthesizeEndpoint:
         assert "artifact" in data
         assert data["artifact"]["room_id"] == sample_room.id
         assert data["artifact"]["artifact_type"] == "markdown"
+        assert data["artifact"]["artifact_kind"] == "final"
+        assert len(data["artifacts"]) == 2
+        assert data["discussion_log"]["artifact_kind"] == "discussion_log"
+        assert data["fallback_used"] is True
         assert "content_preview" in data
         assert data["message"] == "Artifact generated successfully"
 

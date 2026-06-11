@@ -200,7 +200,8 @@ def test_orchestrator_prompt_contains_action_directives():
 
     # Assert - ACTION directives must be present
     assert "ACTION" in prompt
-    assert "next:" in prompt
+    assert "focus:" in prompt
+    assert "所有专家仍会参与发言" in prompt
     assert "converge" in prompt
     assert "synthesize" in prompt
 

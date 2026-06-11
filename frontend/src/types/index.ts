@@ -190,11 +190,13 @@ export interface SharedSourceCreate {
 // === Artifact ===
 
 export type ArtifactType = 'markdown' | 'text' | 'code' | 'csv';
+export type ArtifactKind = 'final' | 'discussion_log';
 
 export interface Artifact {
   id: string;
   room_id: string;
   artifact_type: ArtifactType;
+  artifact_kind: ArtifactKind;
   title: string;
   file_path: string;
   summary: string | null;
@@ -208,6 +210,9 @@ export interface ArtifactContent {
 
 export interface SynthesizeResponse {
   artifact: Artifact;
+  artifacts: Artifact[];
+  discussion_log: Artifact | null;
+  fallback_used: boolean;
   content_preview?: string;
   message: string;
 }

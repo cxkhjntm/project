@@ -47,8 +47,11 @@ export const useArtifactStore = create<ArtifactState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await artifactsApi.synthesize(roomId, title);
+      const generatedArtifacts = response.artifacts?.length
+        ? response.artifacts
+        : [response.artifact];
       set((state) => ({
-        artifacts: [...state.artifacts, response.artifact],
+        artifacts: [...state.artifacts, ...generatedArtifacts],
         isLoading: false,
       }));
       return response;

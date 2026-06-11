@@ -33,21 +33,28 @@ CONVERGENCE_KEYWORDS = [
 
 def parse_host_action(content: str) -> dict[str, Any] | None:
     """Parse ACTION instruction from host message."""
-    match = re.search(
-        r"ACTION:\s*(next:([^\s`，,。；;]+)|converge|synthesize)",
-        content,
-        re.IGNORECASE,
-    )
+    match = re.search(r"ACTION:\s*([^\n\r`]+)", content, re.IGNORECASE)
     if not match:
         return None
-    action_str = match.group(1).lower()
-    if action_str == "converge":
+    action_str = match.group(1).strip()
+    action_lower = action_str.lower()
+    if action_lower.startswith("converge"):
         return {"type": "converge"}
-    elif action_str == "synthesize":
+    elif action_lower.startswith("synthesize"):
         return {"type": "synthesize"}
-    elif action_str.startswith("next:"):
-        expert_id = match.group(2)
-        return {"type": "next", "expert_id": expert_id}
+    elif action_lower.startswith("focus:"):
+        raw_experts = action_str.split(":", 1)[1]
+        expert_ids = [
+            item.strip()
+            for item in re.split(r"[，,、；;]+", raw_experts)
+            if item.strip()
+        ]
+        return {"type": "focus", "expert_ids": expert_ids}
+    elif action_lower.startswith("next:"):
+        # Backward compatibility: older prompts may still produce next,
+        # but it now only marks focus and never excludes other experts.
+        expert_id = action_str.split(":", 1)[1].strip()
+        return {"type": "focus", "expert_ids": [expert_id] if expert_id else []}
     return None
 
 
@@ -178,30 +185,56 @@ class Orchestrator:
     async def _should_stop(self) -> bool:
         return (await self._get_room_status()) in ("stopped", "failed")
 
+    def _focused_participant_ids(self, action: dict[str, Any] | None) -> set[str]:
+        if not action or action.get("type") != "focus":
+            return set()
+
+        targets = [
+            str(target).strip().lower()
+            for target in action.get("expert_ids", [])
+            if str(target).strip()
+        ]
+        if not targets:
+            return set()
+
+        focused_ids: set[str] = set()
+        unmatched_targets = set(targets)
+        for participant in self.participants:
+            aliases = {
+                str(participant.get("role_card_id", "")).lower(),
+                str(participant.get("name", "")).lower(),
+            }
+            if aliases & unmatched_targets:
+                focused_ids.add(str(participant.get("role_card_id", "")))
+                unmatched_targets -= aliases
+
+        if unmatched_targets:
+            logger.warning(
+                "Host selected unknown focus experts, falling back to normal all-participant round",
+                targets=sorted(unmatched_targets),
+                room_id=self.room_id,
+            )
+        return focused_ids
+
     def _participants_for_action(
         self,
         action: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
-        if not action or action.get("type") != "next":
+        focused_ids = self._focused_participant_ids(action)
+        if not focused_ids:
             return self.participants
 
-        target = str(action.get("expert_id", "")).strip().lower()
-        if not target:
-            return self.participants
-
-        for participant in self.participants:
-            if target in {
-                str(participant.get("role_card_id", "")).lower(),
-                str(participant.get("name", "")).lower(),
-            }:
-                return [participant]
-
-        logger.warning(
-            "Host selected unknown expert, falling back to all participants",
-            target=target,
-            room_id=self.room_id,
-        )
-        return self.participants
+        focused = [
+            participant
+            for participant in self.participants
+            if participant.get("role_card_id") in focused_ids
+        ]
+        others = [
+            participant
+            for participant in self.participants
+            if participant.get("role_card_id") not in focused_ids
+        ]
+        return focused + others
 
     async def load_shared_sources(self) -> None:
         from sqlalchemy import select
@@ -277,10 +310,12 @@ class Orchestrator:
                 action = parse_host_action(host_content) if host_content else None
                 length_warning = parse_length_warning(host_content) if host_content else False
 
+                focused_ids = self._focused_participant_ids(action)
                 for participant in self._participants_for_action(action):
                     if not await self._wait_if_paused():
                         break
-                    await self._run_expert_turn(participant, length_warning)
+                    is_focused = participant.get("role_card_id") in focused_ids
+                    await self._run_expert_turn(participant, length_warning, is_focused)
                     if await self._should_stop():
                         break
 
@@ -315,7 +350,9 @@ class Orchestrator:
                     "status": "stopped" if stopped else "completed",
                     "total_rounds": self.current_round,
                     "total_messages": self.total_messages,
-                    "artifact_count": 1 if artifact_info else 0,
+                    "artifact_count": (
+                        len(artifact_info.get("artifacts", [])) if artifact_info else 0
+                    ),
                 },
             )
 
@@ -468,7 +505,10 @@ class Orchestrator:
             return None
 
     async def _run_expert_turn(
-        self, participant: dict[str, Any], length_warning: bool = False
+        self,
+        participant: dict[str, Any],
+        length_warning: bool = False,
+        is_focused: bool = False,
     ) -> None:
         role_card_id = participant["role_card_id"]
         role_name = participant["name"]
@@ -505,6 +545,10 @@ class Orchestrator:
         if length_warning:
             extra_contexts.append(
                 "⚠️ 上一轮回复过长。本轮请严格控制在 300 字以内，使用要点式输出。"
+            )
+        if is_focused:
+            extra_contexts.append(
+                "本轮主持人点名你作为重点回应专家。请优先回应主持人的问题，给出更明确的结论、依据和可执行建议。"
             )
 
         user_guidance = await self._get_user_guidance_context()
@@ -751,7 +795,7 @@ class Orchestrator:
             participant_names = [p["name"] for p in self.participants]
             model_name = self.participants[0]["model"] if self.participants else "unknown"
 
-            artifact = await writer.generate_artifact(
+            result = await writer.generate_artifact(
                 room_id=self.room_id,
                 room_name=self.room.name if hasattr(self.room, "name") else "专家讨论",
                 goal=self.goal,
@@ -765,12 +809,29 @@ class Orchestrator:
 
             await self.session.commit()
 
+            artifact = result.final_artifact
             artifact_info = {
                 "id": artifact.id,
                 "title": artifact.title,
                 "file_path": artifact.file_path,
                 "artifact_type": artifact.artifact_type,
+                "artifact_kind": artifact.artifact_kind,
                 "summary": artifact.summary,
+            }
+            discussion_log_info = {
+                "id": result.discussion_log.id,
+                "title": result.discussion_log.title,
+                "file_path": result.discussion_log.file_path,
+                "artifact_type": result.discussion_log.artifact_type,
+                "artifact_kind": result.discussion_log.artifact_kind,
+                "summary": result.discussion_log.summary,
+            }
+            artifacts_info = [artifact_info, discussion_log_info]
+            return_info = {
+                **artifact_info,
+                "artifacts": artifacts_info,
+                "discussion_log": discussion_log_info,
+                "fallback_used": result.fallback_used,
             }
 
             await self.emit_event(
@@ -778,6 +839,9 @@ class Orchestrator:
                 {
                     "room_id": self.room_id,
                     "artifact": artifact_info,
+                    "artifacts": artifacts_info,
+                    "discussion_log": discussion_log_info,
+                    "fallback_used": result.fallback_used,
                 },
             )
 
@@ -786,7 +850,7 @@ class Orchestrator:
                 room_id=self.room_id,
                 artifact_id=artifact.id,
             )
-            return artifact_info
+            return return_info
 
         except Exception as e:
             logger.error(

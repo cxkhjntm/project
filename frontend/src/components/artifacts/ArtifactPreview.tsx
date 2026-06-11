@@ -102,6 +102,9 @@ export default function ArtifactPreview({
               {artifact.artifact_type === 'code' && '💻 代码'}
               {artifact.artifact_type === 'csv' && '📊 CSV'}
             </span>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-white text-gray-700 border border-gray-200">
+              {artifact.artifact_kind === 'discussion_log' ? '讨论记录' : '最终产物'}
+            </span>
             <span>
               {new Date(artifact.created_at).toLocaleString('zh-CN')}
             </span>

@@ -3,13 +3,17 @@
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.artifact import Artifact
+from app.models.room import RoomParticipant
 from app.utils.formatters import build_discussion_markdown, build_summary, get_sender_label
 from app.utils.logger import get_logger
 
@@ -109,6 +113,21 @@ class ArtifactWriterError(Exception):
     pass
 
 
+@dataclass
+class ArtifactGenerationResult:
+    final_artifact: Artifact
+    discussion_log: Artifact
+    fallback_used: bool
+    content_preview: str | None = None
+
+    @property
+    def artifacts(self) -> list[Artifact]:
+        return [self.final_artifact, self.discussion_log]
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.final_artifact, name)
+
+
 class ArtifactWriter:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -124,7 +143,8 @@ class ArtifactWriter:
         participants: list[str] | None = None,
         source_count: int = 0,
         model_name: str = "unknown",
-    ) -> Artifact:
+        max_length: int | None = None,
+    ) -> ArtifactGenerationResult:
         if not messages:
             raise ValueError("No messages provided for artifact generation")
         if not output_directory:
@@ -132,6 +152,7 @@ class ArtifactWriter:
 
         artifact_format = MODE_FORMAT_MAP.get(mode, ArtifactFormat.MARKDOWN)
         discussion_text = self._build_discussion_text(messages)
+        discussion_log_content = self._build_discussion_log_content(room_name, goal, messages)
         synthesis = self._synthesize_discussion(messages)
 
         round_count = max(m.get("round", 0) for m in messages)
@@ -139,19 +160,41 @@ class ArtifactWriter:
             room_name, participants or [], source_count, model_name, round_count, artifact_format
         )
 
+        fallback_used = False
         if artifact_format == ArtifactFormat.MARKDOWN:
-            part1_content = self._generate_part1(goal, discussion_text, synthesis)
-            part1_summary = self._extract_part1_summary(part1_content)
-            part2_content = self._generate_part2(goal, discussion_text, part1_summary, synthesis)
-            content = header + part1_content + "\n\n" + part2_content
+            generated, fallback_used = await self._generate_markdown_final(
+                room_id=room_id,
+                goal=goal,
+                discussion_text=discussion_text,
+                synthesis=synthesis,
+                mode=mode,
+                max_length=max_length,
+            )
+            content = header + generated
             file_name = "final-plan.md"
             artifact_type = "markdown"
         elif artifact_format == ArtifactFormat.TEXT:
-            content = header + self._generate_text(goal, discussion_text, synthesis)
+            generated, fallback_used = await self._generate_text_final(
+                room_id=room_id,
+                goal=goal,
+                discussion_text=discussion_text,
+                synthesis=synthesis,
+                mode=mode,
+                max_length=max_length,
+            )
+            content = header + generated
             file_name = "final-report.txt"
             artifact_type = "text"
         else:
-            content = header + self._generate_code(goal, discussion_text, synthesis)
+            generated, fallback_used = await self._generate_code_final(
+                room_id=room_id,
+                goal=goal,
+                discussion_text=discussion_text,
+                synthesis=synthesis,
+                mode=mode,
+                max_length=max_length,
+            )
+            content = header + generated
             file_name = "code-draft.md"
             artifact_type = "markdown"
 
@@ -168,33 +211,194 @@ class ArtifactWriter:
 
             log_path = os.path.join(artifact_dir, "discussion-log.md")
             with open(log_path, "w", encoding="utf-8") as f:
-                f.write(discussion_text)
+                f.write(discussion_log_content)
         except OSError as e:
             logger.error("Failed to write artifact file", artifact_dir=artifact_dir, error=str(e))
             raise ArtifactWriterError(f"Failed to write artifact to {artifact_dir}: {e}") from e
 
         summary = self._build_summary(messages)
+        if fallback_used:
+            summary = f"{summary} | fallback=true"
 
-        artifact = Artifact(
+        final_artifact = Artifact(
             id=str(uuid.uuid4()),
             room_id=room_id,
             artifact_type=artifact_type,
+            artifact_kind="final",
             title=room_name,
             file_path=file_path,
             summary=summary,
         )
+        discussion_log_artifact = Artifact(
+            id=str(uuid.uuid4()),
+            room_id=room_id,
+            artifact_type="markdown",
+            artifact_kind="discussion_log",
+            title=f"{room_name} 讨论记录",
+            file_path=log_path,
+            summary=self._build_summary(messages),
+        )
 
-        self.session.add(artifact)
+        self.session.add(final_artifact)
+        self.session.add(discussion_log_artifact)
         await self.session.flush()
 
         logger.info(
             "Generated artifact",
-            artifact_id=artifact.id,
+            artifact_id=final_artifact.id,
             room_id=room_id,
             file_path=file_path,
             mode=mode,
+            fallback_used=fallback_used,
         )
-        return artifact
+        return ArtifactGenerationResult(
+            final_artifact=final_artifact,
+            discussion_log=discussion_log_artifact,
+            fallback_used=fallback_used,
+            content_preview=content[:500],
+        )
+
+    async def _generate_markdown_final(
+        self,
+        room_id: str,
+        goal: str,
+        discussion_text: str,
+        synthesis: dict[str, list[str]],
+        mode: str,
+        max_length: int | None,
+    ) -> tuple[str, bool]:
+        llm_content = await self._generate_llm_synthesis(
+            room_id=room_id,
+            goal=goal,
+            discussion_text=discussion_text,
+            mode=mode,
+            max_length=max_length,
+        )
+        if llm_content:
+            return llm_content, False
+
+        part1_content = self._generate_part1(goal, discussion_text, synthesis)
+        part1_summary = self._extract_part1_summary(part1_content)
+        part2_content = self._generate_part2(goal, discussion_text, part1_summary, synthesis)
+        return part1_content + "\n\n" + part2_content, True
+
+    async def _generate_text_final(
+        self,
+        room_id: str,
+        goal: str,
+        discussion_text: str,
+        synthesis: dict[str, list[str]],
+        mode: str,
+        max_length: int | None,
+    ) -> tuple[str, bool]:
+        llm_content = await self._generate_llm_synthesis(
+            room_id=room_id,
+            goal=goal,
+            discussion_text=discussion_text,
+            mode=mode,
+            max_length=max_length,
+        )
+        if llm_content:
+            return llm_content, False
+        return self._generate_text(goal, discussion_text, synthesis), True
+
+    async def _generate_code_final(
+        self,
+        room_id: str,
+        goal: str,
+        discussion_text: str,
+        synthesis: dict[str, list[str]],
+        mode: str,
+        max_length: int | None,
+    ) -> tuple[str, bool]:
+        llm_content = await self._generate_llm_synthesis(
+            room_id=room_id,
+            goal=goal,
+            discussion_text=discussion_text,
+            mode=mode,
+            max_length=max_length,
+        )
+        if llm_content:
+            return llm_content, False
+        return self._generate_code(goal, discussion_text, synthesis), True
+
+    async def _generate_llm_synthesis(
+        self,
+        room_id: str,
+        goal: str,
+        discussion_text: str,
+        mode: str,
+        max_length: int | None,
+    ) -> str | None:
+        client = await self._build_synthesis_client(room_id)
+        if client is None:
+            return None
+
+        from app.services.context_builder import context_builder
+        from app.services.model_client import ModelClientError
+
+        prompt = context_builder.build_synthesizer_prompt(
+            goal=goal,
+            full_discussion=discussion_text,
+            mode=mode,
+        )
+        prompt += """
+
+额外要求：
+- 生成的是最终产物，不是讨论记录
+- 不要逐轮照抄对话原文
+- 只保留关键结论、实施步骤、风险、验收标准和必要引用
+- 完整逐轮记录会单独保存到 discussion-log.md，不要在本文重复附录
+"""
+
+        try:
+            response = await client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+            )
+        except ModelClientError as e:
+            logger.warning("LLM synthesis failed, falling back to deterministic writer", error=str(e))
+            return None
+        except Exception as e:
+            logger.warning("Unexpected synthesis failure, falling back", error=str(e))
+            return None
+
+        content = response.content.strip()
+        if not content:
+            logger.warning("LLM synthesis returned empty content, falling back")
+            return None
+        if max_length and len(content) > max_length:
+            content = content[:max_length].rstrip() + "\n\n...(内容已按最大长度截断)"
+        return content
+
+    async def _build_synthesis_client(self, room_id: str):
+        result = await self.session.execute(
+            select(RoomParticipant)
+            .where(RoomParticipant.room_id == room_id)
+            .options(selectinload(RoomParticipant.provider))
+        )
+        participant = result.scalars().first()
+        if not participant or not participant.provider:
+            logger.warning("No provider available for LLM synthesis", room_id=room_id)
+            return None
+
+        from app.services.crypto import crypto_service
+        from app.services.model_client import create_model_client
+
+        provider = participant.provider
+        try:
+            api_key = crypto_service.decrypt(provider.api_key_encrypted)
+        except Exception as e:
+            logger.warning("Could not decrypt synthesis provider key", room_id=room_id, error=str(e))
+            return None
+
+        return create_model_client(
+            base_url=provider.base_url,
+            api_key=api_key,
+            model=participant.model_override or provider.default_model,
+            temperature=provider.default_temperature,
+            max_tokens=provider.default_max_output_tokens,
+        )
 
     def _generate_part1(
         self,
@@ -232,10 +436,7 @@ class ArtifactWriter:
 {conclusions}
 
 ## 5. 模块设计
-{implementation}
-
-### 讨论记录摘要
-{discussion[:2000]}"""
+{implementation}"""
 
     def _generate_part2(
         self,
@@ -586,6 +787,13 @@ python main.py
     ) -> str:
         return build_discussion_markdown(
             room_name=room_name, goal=goal, messages=messages, include_summary=False
+        )
+
+    def _build_discussion_log_content(
+        self, room_name: str, goal: str, messages: list[dict[str, Any]]
+    ) -> str:
+        return build_discussion_markdown(
+            room_name=room_name, goal=goal, messages=messages, include_summary=True
         )
 
     def _get_sender_label(self, sender_type: str, sender_id: str | None) -> str:
