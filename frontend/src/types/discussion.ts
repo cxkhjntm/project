@@ -31,6 +31,7 @@ export interface ErrorEvent {
 
 export interface DoneEvent {
   room_id: string;
+  status?: string;
   total_rounds: number;
   total_messages: number;
   artifact_count: number;
@@ -56,7 +57,15 @@ export interface TokenEvent {
   content: string;
 }
 
-export type DiscussionEventType = 'thinking' | 'message' | 'token' | 'artifact' | 'error' | 'done' | 'status' | 'cost_update';
+export type DiscussionEventType =
+  | 'thinking'
+  | 'message'
+  | 'token'
+  | 'artifact'
+  | 'error'
+  | 'done'
+  | 'status'
+  | 'cost_update';
 
 export interface UseDiscussionSSEReturn {
   messages: DiscussionMessage[];
@@ -69,6 +78,11 @@ export interface UseDiscussionSSEReturn {
   totalRounds: number;
   totalTokens: number;
   startTimestamp: number | null;
-  startDiscussion: (roomId: string) => Promise<void>;
+  startDiscussion: (
+    roomId: string,
+    options?: { reset?: boolean; connect?: boolean; initialStatus?: string },
+  ) => Promise<void>;
+  loadHistory: (roomId: string, status?: string) => Promise<void>;
+  appendMessage: (message: DiscussionMessage) => void;
   reset: () => void;
 }

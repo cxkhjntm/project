@@ -7,8 +7,9 @@ import type {
   StatusEvent,
   CostUpdateEvent,
   UseDiscussionSSEReturn,
+  DoneEvent,
 } from '../types/discussion';
-import { API_BASE } from '../api/client';
+import { API_BASE, apiClient } from '../api/client';
 
 interface ArtifactInfo {
   id: string;
@@ -38,6 +39,15 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 3;
 
+  const appendMessage = useCallback((message: DiscussionMessage) => {
+    setMessages((prev) => {
+      if (prev.some((item) => item.id === message.id)) {
+        return prev;
+      }
+      return [...prev, message];
+    });
+  }, []);
+
   const closeConnection = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -57,13 +67,13 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     (roomId: string) => {
       closeConnection();
 
-      const url = `${API_BASE}/rooms/${roomId}/start`;
+      const url = `${API_BASE}/rooms/${roomId}/events`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
         reconnectAttemptsRef.current = 0;
-        setStatus('connecting');
+        setStatus((prev) => (prev === 'running' || prev === 'paused' ? prev : 'connecting'));
       };
 
       eventSource.addEventListener('status', (event) => {
@@ -104,7 +114,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
       eventSource.addEventListener('message', (event) => {
         try {
           const data: DiscussionMessage = JSON.parse(event.data);
-          setMessages((prev) => [...prev, data]);
+          appendMessage(data);
 
           if (data.sender_type === 'orchestrator') {
             setStreamingMessages((prev) => {
@@ -181,9 +191,9 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
 
       eventSource.addEventListener('done', (event) => {
         try {
-          JSON.parse(event.data);
+          const data: DoneEvent = JSON.parse(event.data);
           setIsComplete(true);
-          setStatus('completed');
+          setStatus(data.status || 'completed');
           setThinking({});
           setStreamingMessages({});
           closeConnection();
@@ -204,26 +214,58 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
         }
       };
     },
-    [closeConnection, startTimestamp],
+    [appendMessage, closeConnection, startTimestamp],
+  );
+
+  const loadHistory = useCallback(
+    async (roomId: string, nextStatus?: string) => {
+      try {
+        const existingMessages = (await apiClient.getRoomMessages(roomId)) as DiscussionMessage[];
+        setMessages(existingMessages);
+        if (existingMessages.length > 0) {
+          setCurrentRound(existingMessages[existingMessages.length - 1].round || 0);
+        }
+        if (nextStatus) {
+          setStatus(nextStatus);
+          setIsComplete(['completed', 'stopped', 'failed'].includes(nextStatus));
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '加载历史消息失败';
+        setError(message);
+      }
+    },
+    [],
   );
 
   const startDiscussion = useCallback(
-    async (roomId: string) => {
-      setMessages([]);
+    async (
+      roomId: string,
+      options: { reset?: boolean; connect?: boolean; initialStatus?: string } = {},
+    ) => {
+      const shouldReset = options.reset ?? true;
+      const shouldConnect = options.connect ?? true;
+
+      if (shouldReset) {
+        setMessages([]);
+        setTotalTokens(0);
+        setStartTimestamp(null);
+        setArtifact(null);
+      }
       setThinking({});
       setStreamingMessages({});
       setError(null);
       setIsComplete(false);
-      setStatus('connecting');
+      setStatus(options.initialStatus || 'connecting');
       setCurrentRound(0);
       setTotalRounds(0);
-      setTotalTokens(0);
-      setStartTimestamp(null);
-      setArtifact(null);
       reconnectAttemptsRef.current = 0;
-      connect(roomId);
+
+      await loadHistory(roomId, options.initialStatus);
+      if (shouldConnect) {
+        connect(roomId);
+      }
     },
-    [connect],
+    [connect, loadHistory],
   );
 
   const reset = useCallback(() => {
@@ -254,6 +296,8 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
     totalTokens,
     startTimestamp,
     startDiscussion,
+    loadHistory,
+    appendMessage,
     reset,
     artifact,
   };

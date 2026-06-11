@@ -1,5 +1,6 @@
 """Tests for orchestrator."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -104,6 +105,7 @@ async def test_expert_turn_sends_token_events():
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
+    orchestrator._get_user_guidance_context = AsyncMock(return_value="")
 
     async def mock_stream(*args, **kwargs):
         for chunk in ["Hello", " world", "!"]:
@@ -187,6 +189,7 @@ async def test_expert_turn_sends_message_after_stream():
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
+    orchestrator._get_user_guidance_context = AsyncMock(return_value="")
 
     async def mock_stream(*args, **kwargs):
         for chunk in ["Test", " response"]:
@@ -271,6 +274,7 @@ async def test_orchestrator_turn_sends_token_events():
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
+    orchestrator._get_user_guidance_context = AsyncMock(return_value="")
 
     async def mock_stream(*args, **kwargs):
         for chunk in ["Let", " me", " think", "..."]:
@@ -338,6 +342,7 @@ async def test_orchestrator_turn_sends_message_after_stream():
         on_event=mock_on_event,
     )
     orchestrator.current_round = 1
+    orchestrator._get_user_guidance_context = AsyncMock(return_value="")
 
     async def mock_stream(*args, **kwargs):
         for chunk in ["Round", " 1", " complete"]:
@@ -379,6 +384,197 @@ async def test_orchestrator_turn_sends_message_after_stream():
         assert msg_data["sender_type"] == "orchestrator"
         assert msg_data["content"] == "Round 1 complete"
         assert msg_data["round"] == 1
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_turn_includes_user_guidance_in_summary():
+    """User guidance should be visible to the host before choosing the next turn."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=3,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(base_url="http://test.com", default_model="gpt-4"),
+            )
+        ],
+    )
+    orchestrator = Orchestrator(session=mock_session, room=room, on_event=mock_on_event)
+    orchestrator.current_round = 2
+    orchestrator.rolling_summary = "已有讨论摘要"
+    orchestrator._get_room_status = AsyncMock(return_value="running")
+    orchestrator._get_user_guidance_context = AsyncMock(
+        return_value="## 用户最新指引\n- 第 1 轮用户指引：请优先评估风险"
+    )
+
+    async def mock_stream(*args, **kwargs):
+        yield "ACTION: next:role-1"
+
+    with (
+        patch("app.services.model_client.create_model_client") as mock_create_client,
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.crypto.crypto_service") as mock_crypto_service,
+        patch("app.services.provider_service.provider_service") as mock_provider_service,
+        patch("app.services.context_builder.context_builder") as mock_context_builder,
+    ):
+        mock_client = MagicMock()
+        mock_client.chat_completion_stream = mock_stream
+        mock_create_client.return_value = mock_client
+
+        mock_provider = MagicMock()
+        mock_provider.api_key_encrypted = "encrypted"
+        mock_provider_service.get_by_id = AsyncMock(return_value=mock_provider)
+        mock_crypto_service.decrypt.return_value = "api-key"
+
+        mock_message = MagicMock(id="msg-orch-1")
+        mock_message_service.create = AsyncMock(return_value=mock_message)
+        mock_context_builder.build_orchestrator_prompt.return_value = "test prompt"
+
+        await orchestrator._run_orchestrator_turn()
+
+    prompt_kwargs = mock_context_builder.build_orchestrator_prompt.call_args.kwargs
+    assert "已有讨论摘要" in prompt_kwargs["rolling_summary"]
+    assert "请优先评估风险" in prompt_kwargs["rolling_summary"]
+
+
+@pytest.mark.asyncio
+async def test_expert_turn_includes_user_guidance_context():
+    """User guidance submitted mid-discussion should be passed to the next expert."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=3,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(base_url="http://test.com", default_model="gpt-4"),
+            )
+        ],
+    )
+    orchestrator = Orchestrator(session=mock_session, room=room, on_event=mock_on_event)
+    orchestrator.current_round = 1
+    orchestrator._get_room_status = AsyncMock(return_value="running")
+    orchestrator._get_user_guidance_context = AsyncMock(
+        return_value="## 用户最新指引\n- 第 1 轮用户指引：请下一位专家优先评估风险"
+    )
+
+    async def mock_stream(*args, **kwargs):
+        yield "专家回复"
+
+    with (
+        patch("app.services.model_client.create_model_client") as mock_create_client,
+        patch("app.services.role_card_service.role_card_service") as mock_role_card_service,
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.crypto.crypto_service") as mock_crypto_service,
+        patch("app.services.provider_service.provider_service") as mock_provider_service,
+        patch("app.services.context_builder.context_builder") as mock_context_builder,
+    ):
+        mock_client = MagicMock()
+        mock_client.chat_completion_stream = mock_stream
+        mock_create_client.return_value = mock_client
+
+        mock_role_card = MagicMock()
+        mock_role_card.name = "Expert 1"
+        mock_role_card.description = "Test expert"
+        mock_role_card.expertise = []
+        mock_role_card.responsibilities = []
+        mock_role_card.constraints = []
+        mock_role_card_service.get_by_id = AsyncMock(return_value=mock_role_card)
+
+        mock_provider = MagicMock()
+        mock_provider.api_key_encrypted = "encrypted"
+        mock_provider_service.get_by_id = AsyncMock(return_value=mock_provider)
+        mock_crypto_service.decrypt.return_value = "api-key"
+
+        mock_message = MagicMock(id="msg-1")
+        mock_message_service.create = AsyncMock(return_value=mock_message)
+        mock_context_builder.build_expert_prompt.return_value = "test prompt"
+
+        await orchestrator._run_expert_turn(
+            {
+                "role_card_id": "role-1",
+                "name": "Expert 1",
+                "provider_id": "provider-1",
+                "model": "gpt-4",
+                "base_url": "http://test.com",
+            }
+        )
+
+    prompt_kwargs = mock_context_builder.build_expert_prompt.call_args.kwargs
+    assert "请下一位专家优先评估风险" in prompt_kwargs["additional_context"]
+
+
+@pytest.mark.asyncio
+async def test_auto_generate_artifact_uses_user_messages_from_database():
+    """Final artifacts should include user guidance messages stored during discussion."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        name="Room 1",
+        goal="Test goal",
+        round_limit=1,
+        output_directory="/tmp/out",
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                role_card=MagicMock(name="Expert 1"),
+                provider=MagicMock(base_url="http://test.com", default_model="gpt-4"),
+            )
+        ],
+    )
+    orchestrator = Orchestrator(session=mock_session, room=room, on_event=mock_on_event)
+
+    db_messages = [
+        SimpleNamespace(
+            sender_type="user",
+            sender_id=None,
+            content="用户补充：优先处理稳定性",
+            round=1,
+            citations=None,
+        ),
+        SimpleNamespace(
+            sender_type="expert",
+            sender_id="role-1",
+            content="专家回复",
+            round=1,
+            citations=None,
+        ),
+    ]
+
+    with (
+        patch("app.services.message_service.message_service") as mock_message_service,
+        patch("app.services.artifact_writer.ArtifactWriter") as artifact_writer_cls,
+    ):
+        mock_message_service.get_by_room = AsyncMock(return_value=db_messages)
+        writer = MagicMock()
+        writer.generate_artifact = AsyncMock(
+            return_value=SimpleNamespace(
+                id="artifact-1",
+                title="Result",
+                file_path="/tmp/out/result.md",
+                artifact_type="markdown",
+                summary=None,
+            )
+        )
+        artifact_writer_cls.return_value = writer
+
+        result = await orchestrator._auto_generate_artifact()
+
+    assert result["id"] == "artifact-1"
+    artifact_messages = writer.generate_artifact.await_args.kwargs["messages"]
+    assert any(
+        message["sender_type"] == "user" and "优先处理稳定性" in message["content"]
+        for message in artifact_messages
+    )
 
 
 # ============================================================

@@ -8,17 +8,112 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import async_session_factory, get_session
+from app.database import get_session
 from app.models.room import Room, RoomParticipant
 from app.schemas.discussion import DiscussionControlRequest, DiscussionStatusResponse
 from app.schemas.message import MessageCreate, MessageResponse
+from app.services.discussion_runtime import discussion_runtime
 from app.services.message_service import message_service
-from app.services.orchestrator import SSEEventType, create_orchestrator
-from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
+TERMINAL_STATUSES = {"completed", "failed", "stopped"}
+STARTABLE_STATUSES = {"idle", "draft", "completed", "failed", "stopped"}
 
 router = APIRouter(prefix="/api/rooms", tags=["discussion"])
+
+
+async def _get_room_with_participants(session: AsyncSession, room_id: str) -> Room | None:
+    result = await session.execute(
+        select(Room)
+        .where(Room.id == room_id)
+        .options(
+            selectinload(Room.participants).selectinload(RoomParticipant.role_card),
+            selectinload(Room.participants).selectinload(RoomParticipant.provider),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _message_event_payload(message) -> dict:
+    return MessageResponse.model_validate(message).model_dump(mode="json")
+
+
+async def _mark_running_and_start_task(room: Room, session: AsyncSession) -> None:
+    if not room.participants:
+        raise HTTPException(status_code=400, detail="Room has no participants")
+
+    room.status = "running"
+    await session.commit()
+    discussion_runtime.ensure_started(room.id)
+
+
+async def _discussion_event_response(room_id: str, session: AsyncSession):
+    from sse_starlette.sse import EventSourceResponse
+
+    result = await session.execute(select(Room).where(Room.id == room_id))
+    room = result.scalar_one_or_none()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    latest_round = await message_service.get_latest_round(session, room_id)
+    initial_status = room.status
+    total_rounds = room.round_limit
+    if initial_status == "running":
+        discussion_runtime.ensure_started(room_id)
+
+    terminal_message_count = None
+    if initial_status in TERMINAL_STATUSES:
+        terminal_message_count = await message_service.count_by_room(session, room_id)
+
+    queue = None
+    if initial_status not in TERMINAL_STATUSES:
+        queue = discussion_runtime.subscribe(room_id)
+
+    async def event_generator():
+        try:
+            yield {
+                "event": "status",
+                "data": json.dumps(
+                    {
+                        "room_id": room_id,
+                        "status": initial_status,
+                        "phase": "subscribed",
+                        "round": latest_round,
+                        "total_rounds": total_rounds,
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+
+            if initial_status in TERMINAL_STATUSES:
+                yield {
+                    "event": "done",
+                    "data": json.dumps(
+                        {
+                            "room_id": room_id,
+                            "status": initial_status,
+                            "total_messages": terminal_message_count or 0,
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+                return
+
+            if queue is None:
+                return
+
+            while True:
+                event_type, data = await queue.get()
+                yield {
+                    "event": event_type,
+                    "data": json.dumps(data, ensure_ascii=False),
+                }
+                if event_type == "done":
+                    break
+        finally:
+            if queue is not None:
+                discussion_runtime.unsubscribe(room_id, queue)
+
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/{room_id}/start")
@@ -37,85 +132,34 @@ async def start_discussion(
     Returns:
         SSE stream of discussion events
     """
-    from sse_starlette.sse import EventSourceResponse
-
-    result = await session.execute(
-        select(Room)
-        .where(Room.id == room_id)
-        .options(
-            selectinload(Room.participants).selectinload(RoomParticipant.role_card),
-            selectinload(Room.participants).selectinload(RoomParticipant.provider),
-        )
-    )
-    room = result.scalar_one_or_none()
+    room = await _get_room_with_participants(session, room_id)
 
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if room.status not in ("idle", "draft", "completed", "stopped"):
+    if room.status in STARTABLE_STATUSES:
+        await _mark_running_and_start_task(room, session)
+    elif room.status == "running":
+        discussion_runtime.ensure_started(room.id)
+    elif room.status != "paused":
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Room is in '{room.status}' state, cannot start discussion. "
-                "Allowed states: draft, idle, completed, stopped"
+                "Allowed states: draft, idle, completed, failed, stopped"
             ),
         )
 
-    if not room.participants:
-        raise HTTPException(status_code=400, detail="Room has no participants")
+    return await _discussion_event_response(room_id, session)
 
-    room.status = "running"
-    await session.flush()
 
-    event_queue = asyncio.Queue()
-
-    async def on_event(event_type: SSEEventType, data: dict):
-        await event_queue.put((event_type.value, data))
-
-    async def run_discussion():
-        async with async_session_factory() as bg_session:
-            merged_room = None
-            try:
-                merged_room = await bg_session.merge(room)
-
-                orchestrator = create_orchestrator(
-                    session=bg_session,
-                    room=merged_room,
-                    on_event=on_event,
-                )
-
-                result = await orchestrator.run_discussion()
-
-                merged_room.status = result.get(
-                    "status",
-                    "completed" if result["success"] else "failed",
-                )
-                await bg_session.commit()
-
-            except Exception as e:
-                logger.error("Discussion failed", error=str(e))
-                if merged_room:
-                    merged_room.status = "failed"
-                    await bg_session.commit()
-            finally:
-                await event_queue.put(None)
-
-    asyncio.create_task(run_discussion())
-
-    async def event_generator():
-        while True:
-            event = await event_queue.get()
-
-            if event is None:
-                break
-
-            event_type, data = event
-            yield {
-                "event": event_type,
-                "data": json.dumps(data, ensure_ascii=False),
-            }
-
-    return EventSourceResponse(event_generator())
+@router.get("/{room_id}/events")
+async def stream_discussion_events(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Subscribe to discussion SSE events without starting a new discussion."""
+    return await _discussion_event_response(room_id, session)
 
 
 @router.get("/{room_id}/messages")
@@ -165,6 +209,10 @@ async def create_user_message(
         raise HTTPException(status_code=400, detail="Message content cannot be empty")
 
     latest_round = await message_service.get_latest_round(session, room_id)
+    effective_round = latest_round
+    if room.status in ("running", "paused"):
+        effective_round = max(1, latest_round)
+
     message = await message_service.create(
         session,
         MessageCreate(
@@ -173,8 +221,14 @@ async def create_user_message(
             sender_id=None,
             content=content,
             citations=None,
-            round=latest_round,
+            round=effective_round,
         ),
+    )
+    await session.commit()
+    await discussion_runtime.broadcast(
+        room_id,
+        "message",
+        _message_event_payload(message),
     )
 
     return MessageResponse.model_validate(message)
@@ -225,7 +279,7 @@ async def stream_messages(
                         yield {
                             "event": "message",
                             "data": json.dumps(
-                                MessageResponse.model_validate(msg).model_dump(),
+                                MessageResponse.model_validate(msg).model_dump(mode="json"),
                                 ensure_ascii=False,
                             ),
                         }
@@ -252,7 +306,7 @@ async def stream_messages(
                     yield {
                         "event": "message",
                         "data": json.dumps(
-                            MessageResponse.model_validate(msg).model_dump(),
+                            MessageResponse.model_validate(msg).model_dump(mode="json"),
                             ensure_ascii=False,
                         ),
                     }
@@ -274,16 +328,25 @@ async def control_discussion(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    should_commit = True
     if request.action == "start":
-        if room.status not in ("draft", "idle", "completed", "stopped"):
+        if room.status in STARTABLE_STATUSES:
+            room = await _get_room_with_participants(session, room_id)
+            if not room:
+                raise HTTPException(status_code=404, detail="Room not found")
+            await _mark_running_and_start_task(room, session)
+            should_commit = False
+        elif room.status == "running":
+            discussion_runtime.ensure_started(room_id)
+            should_commit = False
+        else:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Room is in '{room.status}' state, cannot start. "
-                    "Allowed states: draft, idle, completed, stopped"
+                    "Allowed states: draft, idle, completed, failed, stopped"
                 ),
             )
-        room.status = "running"
     elif request.action == "pause":
         if room.status != "running":
             raise HTTPException(status_code=400, detail="Room is not running")
@@ -297,7 +360,19 @@ async def control_discussion(
             raise HTTPException(status_code=400, detail="Room cannot be stopped")
         room.status = "stopped"
 
-    await session.commit()
+    if should_commit:
+        await session.commit()
+    await discussion_runtime.broadcast(
+        room_id,
+        "status",
+        {
+            "room_id": room_id,
+            "status": room.status,
+            "phase": request.action,
+            "round": await message_service.get_latest_round(session, room_id),
+            "total_rounds": room.round_limit,
+        },
+    )
 
     return {"status": room.status, "action": request.action}
 

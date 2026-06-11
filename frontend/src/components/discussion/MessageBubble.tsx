@@ -113,7 +113,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div className="max-w-[75%] bg-gradient-to-br from-sky-500 to-aqua-500 text-white rounded-2xl rounded-tr-sm px-4.5 py-3 shadow-md shadow-sky-500/10 border border-sky-400/20">
           <div className="text-sm leading-relaxed">{message.content}</div>
           <div className="text-[10px] text-sky-100 mt-1 text-right">
-            {message.round ? `第 ${message.round} 轮生效` : ''}
+            {message.round ? `第 ${message.round} 轮生效` : '已提交，将在下一位专家发言前生效'}
           </div>
         </div>
       </div>

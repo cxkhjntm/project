@@ -10,11 +10,13 @@ interface RoomControlPanelProps {
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
+  draft: { label: '草稿', color: 'bg-gray-100 text-gray-700' },
   idle: { label: '待开始', color: 'bg-gray-100 text-gray-700' },
   running: { label: '进行中', color: 'bg-green-100 text-green-800' },
   paused: { label: '已暂停', color: 'bg-yellow-100 text-yellow-800' },
   completed: { label: '已完成', color: 'bg-blue-100 text-blue-800' },
   failed: { label: '失败', color: 'bg-red-100 text-red-800' },
+  stopped: { label: '已停止', color: 'bg-yellow-100 text-yellow-800' },
 };
 
 export default function RoomControlPanel({
@@ -28,7 +30,7 @@ export default function RoomControlPanel({
   const currentStatus = status?.status || 'idle';
   const config = statusConfig[currentStatus] || statusConfig.idle;
 
-  const showStart = currentStatus === 'idle' || currentStatus === 'completed' || currentStatus === 'failed';
+  const showStart = ['draft', 'idle', 'completed', 'failed', 'stopped'].includes(currentStatus);
   const showPause = currentStatus === 'running' && status?.can_pause;
   const showResume = currentStatus === 'paused' && status?.can_resume;
   const showStop = (currentStatus === 'running' || currentStatus === 'paused') && status?.can_stop;
@@ -72,7 +74,7 @@ export default function RoomControlPanel({
             disabled={isLoading}
             className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {currentStatus === 'idle' ? '开始讨论' : '重新开始'}
+            {currentStatus === 'draft' || currentStatus === 'idle' ? '开始讨论' : '重新开始'}
           </button>
         )}
 

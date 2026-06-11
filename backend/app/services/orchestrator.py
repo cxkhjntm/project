@@ -364,10 +364,11 @@ class Orchestrator:
 
         from app.services.context_builder import context_builder
 
+        user_guidance = await self._get_user_guidance_context()
         prompt = context_builder.build_orchestrator_prompt(
             goal=self.goal,
             shared_sources=self.shared_sources,
-            rolling_summary=self.rolling_summary,
+            rolling_summary=self._with_user_guidance(self.rolling_summary, user_guidance),
             current_round=self.current_round,
             total_rounds=self.max_rounds,
             experts=[{"name": p["name"]} for p in self.participants],
@@ -424,6 +425,7 @@ class Orchestrator:
             )
 
             message = await message_service.create(self.session, message_data)
+            await self.session.commit()
             self.total_messages += 1
             self.total_tokens += estimate_tokens(prompt) + estimate_tokens(full_content)
 
@@ -499,8 +501,18 @@ class Orchestrator:
         from app.services.context_builder import context_builder
 
         additional_context = None
+        extra_contexts = []
         if length_warning:
-            additional_context = "⚠️ 上一轮回复过长。本轮请严格控制在 300 字以内，使用要点式输出。"
+            extra_contexts.append(
+                "⚠️ 上一轮回复过长。本轮请严格控制在 300 字以内，使用要点式输出。"
+            )
+
+        user_guidance = await self._get_user_guidance_context()
+        if user_guidance:
+            extra_contexts.append(user_guidance)
+
+        if extra_contexts:
+            additional_context = "\n\n".join(extra_contexts)
 
         prompt = context_builder.build_expert_prompt(
             role=role_data,
@@ -559,6 +571,7 @@ class Orchestrator:
             )
 
             message = await message_service.create(self.session, message_data)
+            await self.session.commit()
             self.total_messages += 1
             self.total_tokens += estimate_tokens(prompt) + estimate_tokens(full_content)
 
@@ -644,6 +657,39 @@ class Orchestrator:
             new_messages=current_messages,
         )
 
+    async def _get_user_guidance_context(self) -> str:
+        from app.models.message import Message
+
+        result = await self.session.execute(
+            select(Message)
+            .where(Message.room_id == self.room_id, Message.sender_type == "user")
+            .order_by(Message.created_at.asc())
+        )
+        messages = list(result.scalars().all())[-8:]
+        if not messages:
+            return ""
+
+        lines = []
+        for message in messages:
+            content = message.content.strip()
+            if len(content) > 300:
+                content = content[:300] + "..."
+            if message.round > 0:
+                lines.append(f"- 第 {message.round} 轮用户指引：{content}")
+            else:
+                lines.append(f"- 用户预置指引：{content}")
+
+        return "## 用户最新指引\n这些指引由用户在讨论中补充，请从下一次发言开始遵循：\n" + "\n".join(
+            lines
+        )
+
+    def _with_user_guidance(self, rolling_summary: str, user_guidance: str) -> str:
+        if not user_guidance:
+            return rolling_summary
+        if not rolling_summary:
+            return user_guidance
+        return f"{rolling_summary}\n\n{user_guidance}"
+
     def _check_convergence(self) -> bool:
         if self.current_round >= self.max_rounds:
             return True
@@ -675,7 +721,21 @@ class Orchestrator:
     async def _auto_generate_artifact(self) -> dict[str, Any] | None:
         """讨论完成后自动生成产出物。"""
         try:
-            if not self.all_messages:
+            from app.services.message_service import message_service
+
+            db_messages = await message_service.get_by_room(self.session, self.room_id)
+            artifact_messages = [
+                {
+                    "sender_type": message.sender_type,
+                    "sender_id": message.sender_id,
+                    "content": message.content,
+                    "round": message.round,
+                    "citations": message.citations,
+                }
+                for message in db_messages
+            ] or self.all_messages
+
+            if not artifact_messages:
                 logger.warning("No messages to generate artifact from", room_id=self.room_id)
                 return None
 
@@ -695,7 +755,7 @@ class Orchestrator:
                 room_id=self.room_id,
                 room_name=self.room.name if hasattr(self.room, "name") else "专家讨论",
                 goal=self.goal,
-                messages=self.all_messages,
+                messages=artifact_messages,
                 output_directory=output_directory,
                 mode=self.mode,
                 participants=participant_names,

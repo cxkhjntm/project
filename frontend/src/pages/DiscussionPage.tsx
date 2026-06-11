@@ -31,12 +31,13 @@ const modeLabels: Record<string, { label: string; color: string }> = {
   code: { label: '代码', color: 'bg-purple-100 text-purple-700' },
 };
 
-const startableStatuses = new Set(['draft', 'idle', 'completed', 'stopped']);
+const startableStatuses = new Set(['draft', 'idle', 'completed', 'failed', 'stopped']);
 
 export default function DiscussionPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamInitializedRef = useRef<string | null>(null);
 
   const [roomData, setRoomData] = useState<RoomData | null>(null);
   const [isLoadingRoom, setIsLoadingRoom] = useState(true);
@@ -53,12 +54,15 @@ export default function DiscussionPage() {
     totalTokens,
     startTimestamp,
     startDiscussion,
+    loadHistory,
+    appendMessage,
     reset,
     artifact,
   } = useDiscussionSSE();
 
   const {
     status: controlStatus,
+    startDiscussion: controlStartDiscussion,
     pauseDiscussion,
     resumeDiscussion,
     stopDiscussion,
@@ -117,18 +121,45 @@ export default function DiscussionPage() {
   }, [roomId, reset]);
 
   useEffect(() => {
+    streamInitializedRef.current = null;
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || !roomData) return;
+
+    if (roomData.status === 'running' || roomData.status === 'paused') {
+      const streamKey = `${roomId}:active`;
+      if (streamInitializedRef.current !== streamKey) {
+        streamInitializedRef.current = streamKey;
+        startDiscussion(roomId, {
+          reset: false,
+          connect: true,
+          initialStatus: roomData.status,
+        });
+      }
+      return;
+    }
+
+    loadHistory(roomId, roomData.status);
+  }, [roomId, roomData, startDiscussion, loadHistory]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleStartDiscussion = useCallback(async () => {
     if (!roomId) return;
     try {
-      // SSE /start 端点自行管理状态转换，不需要先调用 /control
-      startDiscussion(roomId);
+      await controlStartDiscussion();
+      await startDiscussion(roomId, {
+        reset: true,
+        connect: true,
+        initialStatus: 'running',
+      });
     } catch (err) {
       console.error('Failed to start discussion:', err);
     }
-  }, [roomId, startDiscussion]);
+  }, [roomId, controlStartDiscussion, startDiscussion]);
 
   const handlePauseDiscussion = useCallback(async () => {
     try {
@@ -143,7 +174,11 @@ export default function DiscussionPage() {
     try {
       // 先恢复状态，然后重新连接 SSE
       await resumeDiscussion();
-      startDiscussion(roomId);
+      await startDiscussion(roomId, {
+        reset: false,
+        connect: true,
+        initialStatus: 'running',
+      });
     } catch (err) {
       console.error('Failed to resume discussion:', err);
     }
@@ -172,9 +207,10 @@ export default function DiscussionPage() {
   const handleSendUserMessage = useCallback(
     async (content: string) => {
       if (!roomId) return;
-      await apiClient.sendRoomMessage(roomId, content);
+      const message = await apiClient.sendRoomMessage(roomId, content);
+      appendMessage(message);
     },
-    [roomId],
+    [roomId, appendMessage],
   );
 
   if (!roomId) {
@@ -228,13 +264,23 @@ export default function DiscussionPage() {
     );
   });
 
-  const isDiscussionActive = status === 'running' || status === 'connecting';
-  const canSendMessages = isDiscussionActive && !isComplete;
   const currentRoomStatus = controlStatus?.status || roomData?.status || 'draft';
-  const showStartButton = startableStatuses.has(currentRoomStatus);
-  const showPauseButton = currentRoomStatus === 'running' && controlStatus?.can_pause;
-  const showResumeButton = currentRoomStatus === 'paused' && controlStatus?.can_resume;
-  const showStopButton = (currentRoomStatus === 'running' || currentRoomStatus === 'paused') && controlStatus?.can_stop;
+  const displayStatus = status === 'idle' ? currentRoomStatus : status;
+  const progressStatus =
+    displayStatus === 'paused'
+      ? 'paused'
+      : displayStatus === 'completed' || displayStatus === 'stopped' || displayStatus === 'failed'
+        ? 'completed'
+        : 'running';
+  const canSendMessages =
+    (displayStatus === 'running' || displayStatus === 'connecting' || displayStatus === 'paused') &&
+    !isComplete;
+  const showStartButton = startableStatuses.has(displayStatus);
+  const showPauseButton = displayStatus === 'running' && (controlStatus?.can_pause ?? true);
+  const showResumeButton = displayStatus === 'paused' && (controlStatus?.can_resume ?? true);
+  const showStopButton =
+    (displayStatus === 'running' || displayStatus === 'paused') &&
+    (controlStatus?.can_stop ?? true);
 
   return (
     <div className="flex flex-col h-screen bg-slate-900/5 relative overflow-hidden">
@@ -271,18 +317,19 @@ export default function DiscussionPage() {
             )}
             <span
               className={`text-xs px-2 py-1 rounded-full ${
-                status === 'running' ? 'bg-green-100 text-green-700' :
-                status === 'completed' ? 'bg-gray-100 text-gray-700' :
-                status === 'stopped' ? 'bg-yellow-100 text-yellow-700' :
-                status === 'failed' ? 'bg-red-100 text-red-700' :
+                displayStatus === 'running' ? 'bg-green-100 text-green-700' :
+                displayStatus === 'completed' ? 'bg-gray-100 text-gray-700' :
+                displayStatus === 'stopped' ? 'bg-yellow-100 text-yellow-700' :
+                displayStatus === 'failed' ? 'bg-red-100 text-red-700' :
                 'bg-blue-100 text-blue-700'
               }`}
             >
-              {status === 'running' ? '🟢 进行中' :
-               status === 'completed' ? '✅ 已完成' :
-               status === 'stopped' ? '⏹ 已停止' :
-               status === 'failed' ? '❌ 失败' :
-               status === 'idle' ? '⚪ 待开始' : '⏳ 连接中'}
+              {displayStatus === 'running' ? '🟢 进行中' :
+               displayStatus === 'completed' ? '✅ 已完成' :
+               displayStatus === 'stopped' ? '⏹ 已停止' :
+               displayStatus === 'failed' ? '❌ 失败' :
+               displayStatus === 'paused' ? '⏸ 已暂停' :
+               displayStatus === 'draft' || displayStatus === 'idle' ? '⚪ 待开始' : '⏳ 连接中'}
             </span>
 
             {/* Control buttons */}
@@ -365,7 +412,7 @@ export default function DiscussionPage() {
         <ParticipantSidebar
           participants={roomData?.participants || []}
           currentSpeaker={currentSpeaker}
-          status={status}
+          status={displayStatus}
         />
 
         {/* Right: chat area */}
@@ -376,29 +423,29 @@ export default function DiscussionPage() {
               currentRound={currentRound}
               maxRounds={totalRounds || roomData?.round_limit || 5}
               startTimestamp={startTimestamp}
-              status={status as 'running' | 'paused' | 'completed'}
+              status={progressStatus}
             />
           </div>
 
           {/* Messages (scrollable) */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {/* Idle state: waiting to start */}
-            {(status === 'idle' || currentRoomStatus === 'draft') && messages.length === 0 && (
+            {(displayStatus === 'idle' || displayStatus === 'draft') && messages.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-4">点击上方"开始讨论"按钮启动讨论</p>
               </div>
             )}
 
             {/* Connecting state */}
-            {status === 'connecting' && messages.length === 0 && (
+            {displayStatus === 'connecting' && messages.length === 0 && (
               <div className="text-center text-gray-500 py-8 text-sm">讨论即将开始...</div>
             )}
 
             {/* Completed/failed state with restart option */}
-            {(status === 'completed' || status === 'failed') && messages.length === 0 && !error && (
+            {(displayStatus === 'completed' || displayStatus === 'failed') && messages.length === 0 && !error && (
               <div className="text-center py-8">
                 <p className="text-gray-500 mb-4">
-                  {status === 'completed' ? '讨论已完成' : '讨论失败'}
+                  {displayStatus === 'completed' ? '讨论已完成' : '讨论失败'}
                 </p>
               </div>
             )}
@@ -527,8 +574,10 @@ export default function DiscussionPage() {
             onSend={handleSendUserMessage}
             disabled={!canSendMessages}
             placeholder={
-              status === 'running'
+              displayStatus === 'running'
                 ? '输入消息指引讨论方向...'
+                : displayStatus === 'paused'
+                  ? '讨论已暂停，可先输入补充指引...'
                 : '讨论开始后可输入消息...'
             }
           />

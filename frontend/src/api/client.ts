@@ -3,6 +3,8 @@
  * Uses the Vite proxy (/api -> http://localhost:8000) in development.
  */
 
+import type { DiscussionMessage } from '../types/discussion';
+
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 interface RequestOptions {
@@ -159,7 +161,7 @@ class ApiClient {
     return this.request(`/rooms/${roomId}/messages`);
   }
 
-  async sendRoomMessage(roomId: string, content: string): Promise<unknown> {
+  async sendRoomMessage(roomId: string, content: string): Promise<DiscussionMessage> {
     return this.request(`/rooms/${roomId}/messages`, {
       method: 'POST',
       body: { content },
