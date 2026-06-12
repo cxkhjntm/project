@@ -44,7 +44,7 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
   const progress = Math.min(90, (elapsed / Math.max(1, estimatedSeconds)) * 90);
 
   return (
-    <div className="flex gap-3 py-4 px-4 bg-white/40 backdrop-blur-sm rounded-2xl border border-slate-200/30 shadow-sm mt-2 mb-4 max-w-[80%]">
+    <div className="flex gap-3 py-4 px-4 bg-white/95 rounded-2xl border border-slate-200/30 shadow-sm mt-2 mb-4 max-w-[80%]">
       <div
         className="w-[3px] rounded-full flex-shrink-0"
         style={{ backgroundColor: color }}

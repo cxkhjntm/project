@@ -33,10 +33,45 @@ const modeLabels: Record<string, { label: string; color: string }> = {
 
 const startableStatuses = new Set(['draft', 'idle', 'completed', 'failed', 'stopped']);
 
+/** 将 streaming 消息抽取为独立组件，避免整个列表重渲染 */
+const StreamingMessages = React.memo(({
+  streamingMessages,
+  currentRound,
+  roomId,
+  participantNameMap,
+}: {
+  streamingMessages: Record<string, string>;
+  currentRound: number;
+  roomId: string;
+  participantNameMap: Record<string, string>;
+}) => (
+  <>
+    {Object.entries(streamingMessages).map(([roleName, content]) => (
+      <MessageBubble
+        key={`stream-${roleName}`}
+        message={{
+          id: `stream-${roleName}`,
+          sender_type: roleName === '主持人' ? 'orchestrator' : 'expert',
+          sender_id: roleName,
+          content: content,
+          round: currentRound,
+          room_id: roomId,
+          citations: null,
+          created_at: new Date().toISOString(),
+        }}
+        isStreaming={true}
+        participantNameMap={participantNameMap}
+      />
+    ))}
+  </>
+));
+
 export default function DiscussionPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
   const streamInitializedRef = useRef<string | null>(null);
 
   const [roomData, setRoomData] = useState<RoomData | null>(null);
@@ -76,6 +111,7 @@ export default function DiscussionPage() {
   const [synthesizeError, setSynthesizeError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [historyArtifacts, setHistoryArtifacts] = useState<Artifact[]>([]);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
   const currentSpeaker = React.useMemo(() => {
     const thinkingRoles = Object.entries(thinking)
@@ -147,8 +183,21 @@ export default function DiscussionPage() {
     loadHistory(roomId, roomData.status);
   }, [roomId, roomData, startDiscussion, loadHistory]);
 
+  // 监听滚动事件，判断用户是否在底部
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const threshold = 100;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    isAtBottomRef.current = atBottom;
+    setShowScrollButton(!atBottom);
+  }, []);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // 只有用户在底部时才自动滚动
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages.length, streamingScrollTick]);
 
   const handleStartDiscussion = useCallback(async () => {
@@ -435,7 +484,11 @@ export default function DiscussionPage() {
           </div>
 
           {/* Messages (scrollable) */}
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto px-6 py-4"
+          >
             {/* Idle state: waiting to start */}
             {(displayStatus === 'idle' || displayStatus === 'draft') && messages.length === 0 && (
               <div className="text-center py-8">
@@ -461,23 +514,12 @@ export default function DiscussionPage() {
             {messageElements}
 
             {/* Streaming messages (currently being generated) */}
-            {Object.entries(streamingMessages).map(([roleName, content]) => (
-              <MessageBubble
-                key={`stream-${roleName}`}
-                message={{
-                  id: `stream-${roleName}`,
-                  sender_type: roleName === '主持人' ? 'orchestrator' : 'expert',
-                  sender_id: roleName,
-                  content: content,
-                  round: currentRound,
-                  room_id: roomId || '',
-                  citations: null,
-                  created_at: new Date().toISOString(),
-                }}
-                isStreaming={true}
-                participantNameMap={participantNameMap}
-              />
-            ))}
+            <StreamingMessages
+              streamingMessages={streamingMessages}
+              currentRound={currentRound}
+              roomId={roomId || ''}
+              participantNameMap={participantNameMap}
+            />
 
             {/* Thinking indicators */}
             {thinkingRoles.map((role) => (
@@ -486,6 +528,20 @@ export default function DiscussionPage() {
 
             <div ref={messagesEndRef} />
           </div>
+
+          {/* 回到底部浮动按钮 */}
+          {showScrollButton && (
+            <button
+              onClick={() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="absolute bottom-24 right-8 z-20 w-10 h-10 rounded-full bg-primary-600 text-white
+                         shadow-lg flex items-center justify-center hover:bg-primary-700 transition-colors"
+              title="回到最新消息"
+            >
+              ↓
+            </button>
+          )}
 
           {/* Error bar */}
           {error && (

@@ -133,6 +133,17 @@ class ApiClient {
     });
   }
 
+  async generateRoleCard(data: {
+    provider_id: string;
+    model_override?: string;
+    prompt_text: string;
+  }): Promise<unknown> {
+    return this.request('/role-cards/generate', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
   // === Rooms ===
 
   async getRooms(): Promise<unknown[]> {

@@ -68,7 +68,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
 
   const scheduleTokenFlush = useCallback(() => {
     if (tokenFlushTimeoutRef.current) return;
-    tokenFlushTimeoutRef.current = setTimeout(flushTokenBuffer, 100);
+    tokenFlushTimeoutRef.current = setTimeout(flushTokenBuffer, 200);
   }, [flushTokenBuffer]);
 
   const closeConnection = useCallback(() => {
@@ -167,14 +167,7 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
             // 对于专家消息，用 sender_id 清除
             // 但 thinking 是用 role name 设置的，这里无法直接匹配
             // 所以我们清除所有 true 状态的 thinking（当前只有一个专家在 thinking）
-            setThinking((prev) => {
-              const next = { ...prev };
-              // 把所有 thinking 状态设为 false
-              Object.keys(next).forEach((key) => {
-                if (next[key]) next[key] = false;
-              });
-              return next;
-            });
+            setThinking({});  // 直接清空所有 thinking 状态
           }
 
           if (data.round) setCurrentRound(data.round);

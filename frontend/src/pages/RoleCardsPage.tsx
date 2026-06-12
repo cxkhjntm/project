@@ -4,6 +4,7 @@ import type { RoleCard, RoleCardCreate } from '@/types';
 import RoleCardList from '@/components/role-card/RoleCardList';
 import RoleCardForm from '@/components/role-card/RoleCardForm';
 import RoleCardPreview from '@/components/role-card/RoleCardPreview';
+import RoleCardGenerator from '@/components/role-card/RoleCardGenerator';
 
 export default function RoleCardsPage() {
   const [roleCards, setRoleCards] = useState<RoleCard[]>([]);
@@ -14,6 +15,8 @@ export default function RoleCardsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previewRoleCard, setPreviewRoleCard] = useState<RoleCard | null>(null);
   const [copyTarget, setCopyTarget] = useState<RoleCard | null>(null);
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [generatedData, setGeneratedData] = useState<RoleCardCreate | null>(null);
 
   const fetchRoleCards = useCallback(async () => {
     try {
@@ -98,7 +101,14 @@ export default function RoleCardsPage() {
 
   const handleCancel = () => {
     setEditingRoleCard(null);
+    setGeneratedData(null);
     setShowForm(false);
+  };
+
+  const handleGenerated = (data: RoleCardCreate) => {
+    setGeneratedData(data);
+    setShowGenerator(false);
+    setShowForm(true);
   };
 
   return (
@@ -110,13 +120,21 @@ export default function RoleCardsPage() {
             创建和管理 AI 专家角色，定义专业领域、职责和系统提示词
           </p>
         </div>
-        {!showForm && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            + 添加角色卡
-          </button>
+        {!showForm && !showGenerator && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowGenerator(true)}
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-sky-500 rounded-xl hover:from-violet-400 hover:to-sky-400 shadow-md shadow-violet-500/20 transition-all duration-snappy flex items-center gap-1.5"
+            >
+              <span>✨</span> AI 生成角色卡
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              + 手动添加
+            </button>
+          </div>
         )}
       </div>
 
@@ -143,7 +161,7 @@ export default function RoleCardsPage() {
           <div className="relative glass-panel-darker rounded-2xl shadow-glass-hover max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col border border-slate-200/50">
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h2 className="text-lg font-medium text-gray-900">
-                {editingRoleCard ? '编辑角色卡' : '添加角色卡'}
+                {editingRoleCard ? '编辑角色卡' : generatedData ? '✨ AI 生成的角色卡 — 确认并编辑' : '添加角色卡'}
               </h2>
               <button
                 onClick={handleCancel}
@@ -155,6 +173,7 @@ export default function RoleCardsPage() {
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <RoleCardForm
                 roleCard={editingRoleCard ?? undefined}
+                initialData={generatedData ?? undefined}
                 onSubmit={editingRoleCard ? handleUpdate : handleCreate}
                 onCancel={handleCancel}
                 isSubmitting={isSubmitting}
@@ -213,6 +232,12 @@ export default function RoleCardsPage() {
         <RoleCardPreview
           roleCard={previewRoleCard}
           onClose={() => setPreviewRoleCard(null)}
+        />
+      )}
+      {showGenerator && (
+        <RoleCardGenerator
+          onGenerated={handleGenerated}
+          onCancel={() => setShowGenerator(false)}
         />
       )}
     </div>

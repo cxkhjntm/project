@@ -7,6 +7,8 @@ from app.database import get_session
 from app.schemas.role_card import (
     RoleCardCopyRequest,
     RoleCardCreate,
+    RoleCardGenerateRequest,
+    RoleCardGenerateResponse,
     RoleCardResponse,
     RoleCardUpdate,
 )
@@ -23,6 +25,24 @@ async def create_role_card(
     """Create a new role card."""
     role_card = await role_card_service.create(session, data)
     return RoleCardResponse.model_validate(role_card)
+
+
+@router.post("/generate", response_model=RoleCardGenerateResponse)
+async def generate_role_card(
+    data: RoleCardGenerateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> RoleCardGenerateResponse:
+    """Generate a role card from prompt text using LLM."""
+    try:
+        result = await role_card_service.generate_from_prompt(
+            session,
+            provider_id=data.provider_id,
+            prompt_text=data.prompt_text,
+            model_override=data.model_override,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("", response_model=list[RoleCardResponse])

@@ -60,3 +60,26 @@ class RoleCardCopyRequest(BaseModel):
     """Schema for copying a role card."""
 
     new_name: str = Field(..., min_length=1, max_length=100, description="Name for the copy")
+
+
+class RoleCardGenerateRequest(BaseModel):
+    """Schema for AI-generating a role card from prompt."""
+
+    provider_id: str = Field(..., description="Provider ID to use for generation")
+    model_override: str | None = Field(None, description="Override provider's default model")
+    prompt_text: str = Field(
+        ..., min_length=10, max_length=50000, description="Raw prompt text to analyze"
+    )
+
+
+class RoleCardGenerateResponse(BaseModel):
+    """Schema for generated role card data."""
+
+    name: str
+    description: str
+    expertise: list[str]
+    responsibilities: list[str]
+    constraints: list[str] | None = None
+    system_prompt: str
+    output_style: str | None = None
+    temperature: float = 0.7

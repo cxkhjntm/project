@@ -20,6 +20,7 @@ type RoleCardFormData = z.infer<typeof roleCardSchema>;
 
 interface RoleCardFormProps {
   roleCard?: RoleCard;
+  initialData?: RoleCardCreate;
   onSubmit: (data: RoleCardCreate) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
@@ -34,41 +35,62 @@ function parseToList(text: string): string[] {
 
 export default function RoleCardForm({
   roleCard,
+  initialData,
   onSubmit,
   onCancel,
   isSubmitting = false,
 }: RoleCardFormProps) {
+  // Determine default values: editing > AI generated > empty
+  const getDefaultValues = (): RoleCardFormData => {
+    if (roleCard) {
+      return {
+        name: roleCard.name,
+        description: roleCard.description,
+        expertise: roleCard.expertise.join('\n'),
+        responsibilities: roleCard.responsibilities.join('\n'),
+        constraints: roleCard.constraints?.join('\n') ?? '',
+        system_prompt: roleCard.system_prompt,
+        output_style: roleCard.output_style ?? '',
+        default_provider_id: roleCard.default_provider_id ?? '',
+        default_model: roleCard.default_model ?? '',
+        temperature: roleCard.temperature,
+      };
+    }
+    if (initialData) {
+      return {
+        name: initialData.name,
+        description: initialData.description,
+        expertise: initialData.expertise.join('\n'),
+        responsibilities: initialData.responsibilities.join('\n'),
+        constraints: initialData.constraints?.join('\n') ?? '',
+        system_prompt: initialData.system_prompt,
+        output_style: initialData.output_style ?? '',
+        default_provider_id: initialData.default_provider_id ?? '',
+        default_model: initialData.default_model ?? '',
+        temperature: initialData.temperature ?? 0.7,
+      };
+    }
+    return {
+      name: '',
+      description: '',
+      expertise: '',
+      responsibilities: '',
+      constraints: '',
+      system_prompt: '',
+      output_style: '',
+      default_provider_id: '',
+      default_model: '',
+      temperature: 0.7,
+    };
+  };
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<RoleCardFormData>({
     resolver: zodResolver(roleCardSchema),
-    defaultValues: roleCard
-      ? {
-          name: roleCard.name,
-          description: roleCard.description,
-          expertise: roleCard.expertise.join('\n'),
-          responsibilities: roleCard.responsibilities.join('\n'),
-          constraints: roleCard.constraints?.join('\n') ?? '',
-          system_prompt: roleCard.system_prompt,
-          output_style: roleCard.output_style ?? '',
-          default_provider_id: roleCard.default_provider_id ?? '',
-          default_model: roleCard.default_model ?? '',
-          temperature: roleCard.temperature,
-        }
-      : {
-          name: '',
-          description: '',
-          expertise: '',
-          responsibilities: '',
-          constraints: '',
-          system_prompt: '',
-          output_style: '',
-          default_provider_id: '',
-          default_model: '',
-          temperature: 0.7,
-        },
+    defaultValues: getDefaultValues(),
   });
 
   const handleFormSubmit = async (data: RoleCardFormData) => {

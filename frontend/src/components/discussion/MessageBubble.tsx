@@ -1,4 +1,6 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { DiscussionMessage } from '../../types/discussion';
 import { CitationBlock } from './CitationBlock';
 
@@ -58,12 +60,25 @@ function getEmoji(name: string): string {
   return EXPERT_EMOJIS[name] || '🤖';
 }
 
+/** Markdown 渲染组件 */
+const MarkdownContent: React.FC<{ content: string; isStreaming?: boolean }> = ({
+  content,
+  isStreaming,
+}) => (
+  <div className="markdown-body text-sm leading-relaxed">
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      {content}
+    </ReactMarkdown>
+    {isStreaming && <span className="typing-cursor" />}
+  </div>
+);
+
 /** 判断 sender_id 是否为 UUID 格式 */
 function isUUID(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   message,
   showExpertiseBadge = false,
   participantNameMap = {},
@@ -94,14 +109,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   if (isOrchestrator) {
     return (
       <div className="flex justify-center mb-4">
-        <div className={`bg-indigo-500/5 backdrop-blur-sm border border-indigo-200/30 rounded-2xl px-5 py-3 max-w-[80%] shadow-sm text-center ${isStreaming ? 'streaming-message' : ''}`}>
+        <div className={`bg-indigo-50 border border-indigo-200/30 rounded-2xl px-5 py-3 max-w-[80%] shadow-sm text-center ${isStreaming ? 'streaming-message' : ''}`}>
           <div className="text-xs text-indigo-500 font-semibold mb-1">
             🎯 主持人 · 第 {message.round} 轮讨论
           </div>
-          <div className="text-sm text-slate-700 font-medium leading-relaxed">
-            {message.content}
-            {isStreaming && <span className="typing-cursor" />}
-          </div>
+          <MarkdownContent content={message.content} isStreaming={isStreaming} />
         </div>
       </div>
     );
@@ -130,9 +142,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div className="flex justify-start mb-4">
-      <div className={`max-w-[80%] rounded-2xl bg-white/70 backdrop-blur-sm shadow-glass border border-slate-200/30 overflow-hidden hover:border-aqua-300/40 transition-colors duration-snappy ${isStreaming ? 'streaming-message' : ''}`}>
-        <div className="w-[4px] float-left h-full min-h-[60px]" style={{ backgroundColor: expertColor }} />
-        <div className="px-4 py-3">
+      <div className={`max-w-[80%] rounded-2xl bg-white shadow-glass border border-slate-200/30 overflow-clip hover:border-aqua-300/40 transition-colors duration-snappy flex ${isStreaming ? 'streaming-message' : ''}`}>
+        {/* 色条：flex 子项，self-stretch 自动拉满父容器高度 */}
+        <div
+          className="w-1 shrink-0 self-stretch rounded-l-2xl"
+          style={{ backgroundColor: expertColor }}
+        />
+        <div className="px-4 py-3 min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-base">{emoji}</span>
             <span className="text-sm font-semibold text-slate-800">
@@ -148,10 +164,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
             <span className="text-xs text-slate-400">第 {message.round} 轮</span>
           </div>
-          <div className="text-slate-700 whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content}
-            {isStreaming && <span className="typing-cursor" />}
-          </div>
+          <MarkdownContent content={message.content} isStreaming={isStreaming} />
           {message.key_point && (
             <div className="mt-2 pt-2 border-t border-gray-100">
               <div className="text-xs text-gray-500">
@@ -164,4 +177,4 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
     </div>
   );
-};
+});
