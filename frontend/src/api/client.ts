@@ -219,6 +219,16 @@ class ApiClient {
     return this.request(`/rooms/${roomId}/status`);
   }
 
+  // === Settings ===
+
+  async getSettings(): Promise<Record<string, string>> {
+    return this.request('/settings');
+  }
+
+  async updateSettings(data: Record<string, string>): Promise<Record<string, string>> {
+    return this.request('/settings', { method: 'PUT', body: data });
+  }
+
   // === Filesystem ===
 
   async browseDirectory(path: string = ''): Promise<{

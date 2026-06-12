@@ -4,7 +4,7 @@ import asyncio
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -40,6 +40,11 @@ def _message_event_payload(message) -> dict:
 async def _mark_running_and_start_task(room: Room, session: AsyncSession) -> None:
     if not room.participants:
         raise HTTPException(status_code=400, detail="Room has no participants")
+
+    if room.status in STARTABLE_STATUSES - {"draft", "idle"}:
+        from app.models.message import Message
+
+        await session.execute(delete(Message).where(Message.room_id == room.id))
 
     room.status = "running"
     await session.commit()
@@ -391,7 +396,7 @@ async def get_discussion_status(
     return DiscussionStatusResponse(
         room_id=room.id,
         status=room.status,
-        current_round=0,
+        current_round=await message_service.get_latest_round(session, room_id),
         total_rounds=room.round_limit,
         is_paused=room.status == "paused",
         can_pause=room.status == "running",

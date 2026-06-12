@@ -51,6 +51,10 @@ class RoomService:
             strategy=data.strategy,
             output_directory=validated_output_dir,
             round_limit=data.round_limit,
+            convergence_agreement_threshold=data.convergence_agreement_threshold,
+            convergence_conflict_threshold=data.convergence_conflict_threshold,
+            convergence_provider_id=data.convergence_provider_id,
+            convergence_model_override=data.convergence_model_override,
             status="draft",
         )
         session.add(room)

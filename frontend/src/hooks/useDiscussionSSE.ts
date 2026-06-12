@@ -298,7 +298,9 @@ export function useDiscussionSSE(): UseDiscussionSSEReturn & {
       setTotalRounds(0);
       reconnectAttemptsRef.current = 0;
 
-      await loadHistory(roomId, options.initialStatus);
+      if (!shouldReset) {
+        await loadHistory(roomId, options.initialStatus);
+      }
       if (shouldConnect) {
         connect(roomId);
       }

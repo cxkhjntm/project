@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/api/client';
-import type { Provider, ProviderCreate, ProviderUpdate } from '@/types';
+import type { AppSettings, Provider, ProviderCreate, ProviderUpdate } from '@/types';
 import ProviderList from '@/components/provider/ProviderList';
 import ProviderForm from '@/components/provider/ProviderForm';
 
@@ -11,13 +11,25 @@ export default function SettingsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings>({
+    convergence_provider_id: '',
+    convergence_model_override: '',
+  });
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   const fetchProviders = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await apiClient.getProviders();
+      const [data, settings] = await Promise.all([
+        apiClient.getProviders(),
+        apiClient.getSettings(),
+      ]);
       setProviders(data as Provider[]);
+      setAppSettings({
+        convergence_provider_id: settings.convergence_provider_id || '',
+        convergence_model_override: settings.convergence_model_override || '',
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 Provider 列表失败');
     } finally {
@@ -77,6 +89,23 @@ export default function SettingsPage() {
     setShowForm(false);
   };
 
+  const handleSettingsSave = async () => {
+    try {
+      setSettingsSaved(false);
+      const settings = await apiClient.updateSettings({
+        convergence_provider_id: appSettings.convergence_provider_id,
+        convergence_model_override: appSettings.convergence_model_override,
+      });
+      setAppSettings({
+        convergence_provider_id: settings.convergence_provider_id || '',
+        convergence_model_override: settings.convergence_model_override || '',
+      });
+      setSettingsSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存全局设置失败');
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -123,6 +152,68 @@ export default function SettingsPage() {
           />
         </div>
       )}
+
+      <section className="mb-6 border border-slate-200/70 rounded-lg bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-lg font-medium text-gray-900">全局设置</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            配置用于每轮讨论收敛判断的模型；未选择时使用房间内第一位专家的 Provider。
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              收敛判断 Provider
+            </label>
+            <select
+              value={appSettings.convergence_provider_id}
+              onChange={e => {
+                setSettingsSaved(false);
+                setAppSettings(prev => ({
+                  ...prev,
+                  convergence_provider_id: e.target.value,
+                }));
+              }}
+              className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
+            >
+              <option value="">使用房间默认 Provider</option>
+              {providers.map(provider => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              模型覆盖
+            </label>
+            <input
+              type="text"
+              value={appSettings.convergence_model_override}
+              onChange={e => {
+                setSettingsSaved(false);
+                setAppSettings(prev => ({
+                  ...prev,
+                  convergence_model_override: e.target.value,
+                }));
+              }}
+              className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 focus:bg-white focus:border-aqua-400 focus:ring-2 focus:ring-aqua-400/20 rounded-xl transition-all duration-snappy outline-none"
+              placeholder="留空使用 Provider 默认模型"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleSettingsSave}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            保存
+          </button>
+        </div>
+        {settingsSaved && (
+          <p className="mt-3 text-sm text-emerald-600">全局设置已保存</p>
+        )}
+      </section>
 
       {isLoading ? (
         <div className="text-center py-12">

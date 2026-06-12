@@ -228,6 +228,7 @@ async def test_start_discussion_completed_is_allowed(sample_room):
     assert sample_room.status == "running"
     ensure_started.assert_called_once_with("test-room-id")
     session.commit.assert_awaited_once()
+    assert session.execute.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -385,10 +386,16 @@ async def test_get_discussion_status(sample_room):
     sample_room.status = "running"
     session = _mock_session_with_room(sample_room)
 
-    result = await get_discussion_status("test-room-id", session)
+    with patch(
+        "app.routers.discussion.message_service.get_latest_round",
+        new_callable=AsyncMock,
+    ) as latest_round:
+        latest_round.return_value = 3
+        result = await get_discussion_status("test-room-id", session)
 
     assert result.room_id == "test-room-id"
     assert result.status == "running"
+    assert result.current_round == 3
     assert result.total_rounds == 5
     assert result.is_paused is False
     assert result.can_pause is True
@@ -401,9 +408,15 @@ async def test_get_discussion_status_paused(sample_room):
     sample_room.status = "paused"
     session = _mock_session_with_room(sample_room)
 
-    result = await get_discussion_status("test-room-id", session)
+    with patch(
+        "app.routers.discussion.message_service.get_latest_round",
+        new_callable=AsyncMock,
+    ) as latest_round:
+        latest_round.return_value = 2
+        result = await get_discussion_status("test-room-id", session)
 
     assert result.status == "paused"
+    assert result.current_round == 2
     assert result.is_paused is True
     assert result.can_pause is False
     assert result.can_resume is True
@@ -415,9 +428,15 @@ async def test_get_discussion_status_draft(sample_room):
     sample_room.status = "draft"
     session = _mock_session_with_room(sample_room)
 
-    result = await get_discussion_status("test-room-id", session)
+    with patch(
+        "app.routers.discussion.message_service.get_latest_round",
+        new_callable=AsyncMock,
+    ) as latest_round:
+        latest_round.return_value = 0
+        result = await get_discussion_status("test-room-id", session)
 
     assert result.status == "draft"
+    assert result.current_round == 0
     assert result.is_paused is False
     assert result.can_pause is False
     assert result.can_resume is False

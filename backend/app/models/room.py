@@ -30,6 +30,12 @@ class Room(Base):
     strategy: Mapped[str] = mapped_column(String(50), default="standard")
     output_directory: Mapped[str] = mapped_column(String(500), nullable=False)
     round_limit: Mapped[int] = mapped_column(Integer, default=5)
+    convergence_agreement_threshold: Mapped[int] = mapped_column(Integer, default=85)
+    convergence_conflict_threshold: Mapped[int] = mapped_column(Integer, default=5)
+    convergence_provider_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("providers.id"), nullable=True
+    )
+    convergence_model_override: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False

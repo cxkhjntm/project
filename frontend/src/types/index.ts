@@ -112,6 +112,10 @@ export interface Room {
   strategy: string;
   output_directory: string;
   round_limit: number;
+  convergence_agreement_threshold: number;
+  convergence_conflict_threshold: number;
+  convergence_provider_id: string | null;
+  convergence_model_override: string | null;
   status: RoomStatus;
   created_at: string;
   updated_at: string;
@@ -124,6 +128,10 @@ export interface RoomCreate {
   mode?: RoomMode;
   output_directory: string;
   round_limit?: number;
+  convergence_agreement_threshold?: number;
+  convergence_conflict_threshold?: number;
+  convergence_provider_id?: string;
+  convergence_model_override?: string;
   participants: ParticipantInput[];
 }
 
@@ -133,6 +141,15 @@ export interface RoomUpdate {
   mode?: RoomMode;
   output_directory?: string;
   round_limit?: number;
+  convergence_agreement_threshold?: number;
+  convergence_conflict_threshold?: number;
+  convergence_provider_id?: string | null;
+  convergence_model_override?: string | null;
+}
+
+export interface AppSettings {
+  convergence_provider_id: string;
+  convergence_model_override: string;
 }
 
 // === RoomParticipant ===

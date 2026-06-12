@@ -108,7 +108,7 @@ def test_build_expert_prompt_with_rolling_summary():
 
 
 def test_build_expert_prompt_last_round():
-    """Test building expert prompt for last round with convergence notice."""
+    """Test building expert prompt for last round with final-summary notice."""
     # Arrange
     builder = ContextBuilder()
     role_data = {
@@ -130,8 +130,8 @@ def test_build_expert_prompt_last_round():
     )
 
     # Assert
-    assert "最后几轮" in prompt
-    assert "收敛观点" in prompt
+    assert "最后一轮" in prompt
+    assert "最终总结" in prompt
 
 
 def test_build_orchestrator_prompt():
@@ -159,8 +159,8 @@ def test_build_orchestrator_prompt():
     assert "设计登录模块" in prompt
 
 
-def test_orchestrator_prompt_contains_convergence_criteria():
-    """Test that orchestrator prompt contains convergence judgment criteria."""
+def test_orchestrator_prompt_excludes_convergence_criteria():
+    """Host prompt should not ask the host to judge convergence."""
     # Arrange
     builder = ContextBuilder()
     experts = [{"name": "系统架构师"}, {"name": "产品经理"}]
@@ -175,11 +175,10 @@ def test_orchestrator_prompt_contains_convergence_criteria():
         experts=experts,
     )
 
-    # Assert - convergence criteria must be present
-    assert "收敛" in prompt
-    assert "观点" in prompt and "一致" in prompt
-    assert "新" in prompt and ("信息" in prompt or "观点" in prompt)
-    assert "决策" in prompt
+    assert "收敛判断标准" not in prompt
+    assert "ACTION: converge" not in prompt
+    assert "ACTION: synthesize" not in prompt
+    assert "收敛判断由独立服务完成" in prompt
 
 
 def test_orchestrator_prompt_contains_action_directives():
@@ -201,9 +200,10 @@ def test_orchestrator_prompt_contains_action_directives():
     # Assert - ACTION directives must be present
     assert "ACTION" in prompt
     assert "focus:" in prompt
+    assert "continue" in prompt
     assert "所有专家仍会参与发言" in prompt
-    assert "converge" in prompt
-    assert "synthesize" in prompt
+    assert "ACTION: converge" not in prompt
+    assert "ACTION: synthesize" not in prompt
 
 
 def test_orchestrator_prompt_near_end_round():
@@ -222,8 +222,9 @@ def test_orchestrator_prompt_near_end_round():
         experts=experts,
     )
 
-    # Assert - should indicate this is the final round
-    assert "最后" in prompt or "收敛" in prompt
+    # Assert - should indicate this is the final round without giving host stop authority
+    assert "最后一轮" in prompt
+    assert "ACTION: converge" not in prompt
 
 
 def test_orchestrator_prompt_early_round():
@@ -304,6 +305,22 @@ def test_build_rolling_summary_with_existing():
     # Assert
     assert "OAuth2" in summary
     assert "登录模块" in summary
+
+
+def test_build_rolling_summary_preserves_head_and_tail_when_truncated():
+    """Long summaries should retain early context and latest discussion."""
+    builder = ContextBuilder(max_summary_tokens=30)
+    existing = "早期关键共识：" + ("A" * 300)
+    new_messages = [{"sender_id": "专家", "content": "最新关键结论：" + ("B" * 20)}]
+
+    summary = builder.build_rolling_summary(
+        existing_summary=existing,
+        new_messages=new_messages,
+    )
+
+    assert "早期关键共识" in summary
+    assert "最新关键结论" in summary
+    assert "中间内容已省略" in summary
 
 
 def test_build_file_contents_empty():

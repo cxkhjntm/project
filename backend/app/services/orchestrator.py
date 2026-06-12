@@ -15,22 +15,6 @@ from app.utils.token_counter import estimate_tokens
 
 logger = get_logger(__name__)
 
-CONVERGENCE_KEYWORDS = [
-    "可行",
-    "同意",
-    "没有异议",
-    "建议直接",
-    "没问题",
-    "LGTM",
-    "一致",
-    "共识",
-    "确认",
-    "通过",
-    "赞成",
-    "支持",
-]
-
-
 def parse_host_action(content: str) -> dict[str, Any] | None:
     """Parse ACTION instruction from host message."""
     match = re.search(r"ACTION:\s*([^\n\r`]+)", content, re.IGNORECASE)
@@ -55,30 +39,14 @@ def parse_host_action(content: str) -> dict[str, Any] | None:
         # but it now only marks focus and never excludes other experts.
         expert_id = action_str.split(":", 1)[1].strip()
         return {"type": "focus", "expert_ids": [expert_id] if expert_id else []}
+    elif action_lower.startswith("continue"):
+        return {"type": "continue"}
     return None
 
 
 def parse_length_warning(content: str) -> bool:
     """Parse LENGTH_WARNING from host message."""
     return bool(re.search(r"LENGTH_WARNING:\s*true", content, re.IGNORECASE))
-
-
-def check_convergence(messages: list[dict[str, Any]], min_consensus: int = 2) -> bool:
-    """Check if discussion has reached convergence."""
-    if not messages:
-        return False
-    last_round = max(m.get("round", 0) for m in messages)
-    last_round_messages = [
-        m for m in messages if m.get("round") == last_round and m.get("sender_type") == "expert"
-    ]
-    if len(last_round_messages) < 2:
-        return False
-    consensus_count = sum(
-        1
-        for msg in last_round_messages
-        if any(kw in msg.get("content", "") for kw in CONVERGENCE_KEYWORDS)
-    )
-    return consensus_count >= min_consensus
 
 
 class DiscussionState(StrEnum):
@@ -138,6 +106,10 @@ class Orchestrator:
         self.all_messages: list[dict[str, Any]] = []
         self.decisions: list[str] = []
         self.mode = room.mode if hasattr(room, "mode") else "code_document"
+        self.agreement_threshold = getattr(room, "convergence_agreement_threshold", 85)
+        self.conflict_threshold = getattr(room, "convergence_conflict_threshold", 5)
+        self.convergence_provider_id = getattr(room, "convergence_provider_id", None)
+        self.convergence_model_override = getattr(room, "convergence_model_override", None)
 
     def should_continue(self) -> bool:
         return self.current_round < self.max_rounds
@@ -324,13 +296,16 @@ class Orchestrator:
 
                 await self._update_rolling_summary()
 
-                if action and action.get("type") == "converge":
-                    break
+                if action and action.get("type") in ("converge", "synthesize"):
+                    if await self._check_convergence():
+                        break
+                    logger.info(
+                        "Host suggested convergence but judge disagreed, continuing",
+                        room_id=self.room_id,
+                        round=self.current_round,
+                    )
 
-                if action and action.get("type") == "synthesize":
-                    break
-
-                if self._check_convergence():
+                if await self._check_convergence():
                     break
 
             stopped = await self._should_stop()
@@ -734,12 +709,56 @@ class Orchestrator:
             return user_guidance
         return f"{rolling_summary}\n\n{user_guidance}"
 
-    def _check_convergence(self) -> bool:
+    async def _check_convergence(self) -> bool:
+        """Use LLM judgment to prevent keyword-based premature convergence."""
         if self.current_round >= self.max_rounds:
             return True
         if self.current_round < 2:
             return False
-        return check_convergence(self.all_messages)
+
+        current_round_messages = [
+            message
+            for message in self.all_messages
+            if message.get("round") == self.current_round
+            and message.get("sender_type") == "expert"
+        ]
+        if len(current_round_messages) < 2:
+            return False
+
+        try:
+            from app.services.convergence_judge import ConvergenceJudge
+
+            judge = ConvergenceJudge(self.session)
+            result = await judge.judge(
+                messages=current_round_messages,
+                current_round=self.current_round,
+                goal=self.goal,
+                agreement_threshold=self.agreement_threshold,
+                conflict_threshold=self.conflict_threshold,
+                provider_id=self.convergence_provider_id,
+                model_override=self.convergence_model_override,
+                fallback_provider_id=(
+                    self.participants[0]["provider_id"] if self.participants else None
+                ),
+            )
+            logger.info(
+                "LLM convergence judge completed",
+                room_id=self.room_id,
+                round=self.current_round,
+                agreement=result.agreement_score,
+                conflict=result.conflict_score,
+                should_converge=result.should_converge,
+                reasoning=result.reasoning,
+            )
+            return result.should_converge
+        except Exception as e:
+            logger.warning(
+                "Convergence judge failed, continuing discussion",
+                room_id=self.room_id,
+                round=self.current_round,
+                error=str(e),
+            )
+            return False
 
     def _extract_key_point(self, content: str) -> str | None:
         skip_patterns = [

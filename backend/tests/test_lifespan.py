@@ -33,6 +33,7 @@ async def test_lifespan_creates_tables():
         "messages",
         "shared_sources",
         "artifacts",
+        "app_settings",
     }
     assert expected_tables.issubset(tables), f"Missing tables: {expected_tables - tables}"
 
@@ -84,5 +85,6 @@ async def test_all_models_registered_with_base():
         "messages",
         "shared_sources",
         "artifacts",
+        "app_settings",
     }
     assert expected.issubset(table_names), f"Missing tables: {expected - table_names}"

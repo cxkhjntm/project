@@ -36,7 +36,7 @@ MODE_TEMPLATES: dict[DiscussionMode, dict[str, str]] = {
 - 引用共享资料中的具体内容时，请标注来源文件名
 - 区分"资料中明确的信息"和"你的推断/建议"
 - 回复控制在 500 字以内
-- 如果是最后几轮，请重点总结你的核心观点
+- 如果是最后一轮，请重点总结你的核心观点
 - 重点关注技术实现方案、架构设计、接口定义""",
         "synthesizer_chapters": """
 ## 1. 背景与目标
@@ -60,7 +60,7 @@ MODE_TEMPLATES: dict[DiscussionMode, dict[str, str]] = {
 - 引用共享资料中的具体内容时，请标注来源文件名
 - 区分"资料中明确的信息"和"你的推断/建议"
 - 回复控制在 500 字以内
-- 如果是最后几轮，请重点总结你的核心观点
+- 如果是最后一轮，请重点总结你的核心观点
 - 重点关注可读性、结论明确、结构清晰、适合汇报""",
         "synthesizer_chapters": """
 ## 1. 执行摘要
@@ -81,7 +81,7 @@ MODE_TEMPLATES: dict[DiscussionMode, dict[str, str]] = {
 - 引用共享资料中的具体内容时，请标注来源文件名
 - 区分"资料中明确的信息"和"你的推断/建议"
 - 回复控制在 500 字以内
-- 如果是最后几轮，请重点总结你的核心观点
+- 如果是最后一轮，请重点总结你的核心观点
 - 重点关注核心代码实现、算法设计、数据结构""",
         "synthesizer_chapters": """
 ## 1. 实现概述
@@ -138,9 +138,7 @@ class ContextBuilder:
             shared_sources, int(self.budget.shared_data * self.chars_per_token)
         )
 
-        round_context = f"当前是第 {current_round}/{total_rounds} 轮讨论。"
-        if current_round >= total_rounds - 1:
-            round_context += "\n注意：这是最后几轮讨论，请开始收敛观点，准备总结。"
+        round_context = self._build_round_context(current_round, total_rounds)
 
         prompt = f"""{role_def}
 
@@ -188,25 +186,17 @@ class ContextBuilder:
         expert_names = ", ".join(e["name"] for e in experts)
         file_contents = self._build_file_contents(shared_sources)
 
-        is_near_end = current_round >= total_rounds - 1
-
-        convergence_section = """
-## 收敛判断标准
-当以下条件满足时，判断讨论已收敛：
-- 专家们的观点已经达成一致，没有重大分歧
-- 没有新的信息或观点出现
-- 讨论已经充分，可以得出结论
-- 关键决策已经确认"""
-
-        if is_near_end:
-            convergence_section += """
-注意：当前已是最后几轮，请优先评估是否满足收敛条件。"""
+        round_hint = ""
+        if current_round >= total_rounds:
+            round_hint = "\n注意：这是最后一轮讨论，请引导专家们做最终总结。"
+        elif current_round == total_rounds - 1:
+            round_hint = "\n提示：讨论即将进入最后阶段。"
 
         prompt = f"""你是专家群聊主持人。你的任务是控制讨论流程，而不是替专家完成全部内容。
 
 本次任务目标：{goal}
 当前工作模式：{mode_config["name"]}（{mode_config["description"]}）
-当前轮次：第 {current_round}/{total_rounds} 轮
+当前轮次：第 {current_round}/{total_rounds} 轮{round_hint}
 参与专家：{expert_names}
 
 共享资料摘要：
@@ -214,18 +204,17 @@ class ContextBuilder:
 
 已有讨论摘要：
 {rolling_summary if rolling_summary else "这是讨论的开始。"}
-{convergence_section}
 
 ## 输出格式要求
 你的回复必须以 ACTION 指令结尾，格式如下：
 - `ACTION: focus:<专家名称1,专家名称2>` — 指定本轮必须重点回应的专家；所有专家仍会参与发言
-- `ACTION: converge` — 讨论已收敛，可以结束
-- `ACTION: synthesize` — 开始生成产出物
+- `ACTION: continue` — 继续正常讨论
 
 调度约束：
 - 不允许只让单个专家独占本轮讨论
 - 如果某些问题必须由特定专家重点回应，使用 `focus`
-- 如果希望所有专家按正常顺序发言，仍然使用 `ACTION: focus:` 或省略专家名称
+- 如果希望所有专家按正常顺序发言，使用 `ACTION: continue`
+- 不要判断讨论是否已经收敛；收敛判断由独立服务完成
 
 请用简洁的主持词引导讨论（不超过 200 字），并在末尾输出 ACTION 指令。"""
 
@@ -282,8 +271,10 @@ class ContextBuilder:
 
     def _build_round_context(self, current_round: int, total_rounds: int) -> str:
         context = f"当前是第 {current_round}/{total_rounds} 轮讨论。"
-        if current_round >= total_rounds - 1:
-            context += "\n注意：这是最后几轮讨论，请开始收敛观点，准备总结。"
+        if current_round >= total_rounds:
+            context += "\n注意：这是最后一轮讨论，请做最终总结。"
+        elif current_round == total_rounds - 1:
+            context += "\n提示：下一轮是最后一轮讨论。"
         elif current_round == 1:
             context += "\n这是第一轮讨论，请从你的专业角度给出初步观点。"
         return context
@@ -316,29 +307,6 @@ class ContextBuilder:
             if len(prompt) > max_chars:
                 prompt = prompt[:max_chars] + "\n\n...(内容已截断以符合Token预算)"
         return prompt
-
-    def _build_role_definition(self, role: dict[str, Any], current_round: int) -> str:
-        if current_round <= FULL_ROLE_ROUNDS:
-            expertise = ", ".join(role.get("expertise", []))
-            responsibilities = "\n".join(f"- {r}" for r in role.get("responsibilities", []))
-            constraints = "\n".join(f"- {c}" for c in role.get("constraints", []))
-
-            return f"""你是{role["name"]}，一位{role.get("description", "专家")}。
-
-## 专业能力
-{expertise}
-
-## 职责
-{responsibilities}
-
-## 约束
-{constraints if constraints else "无特殊约束"}"""
-        else:
-            constraints = role.get("constraints", [])
-            constraint_text = constraints[0] if constraints else ""
-
-            return f"""你是{role["name"]}。{role.get("description", "专家")}
-{f"核心约束：{constraint_text}" if constraint_text else ""}"""
 
     def _build_file_contents_with_budget(
         self, shared_sources: list[dict[str, Any]], max_chars: int
@@ -397,29 +365,6 @@ class ContextBuilder:
 
         return "\n\n".join(sections)
 
-    def _build_file_contents_with_budget(
-        self, shared_sources: list[dict[str, Any]], max_chars: int
-    ) -> str:
-        if not shared_sources:
-            return ""
-        sections = []
-        total_chars = 0
-        for source in shared_sources:
-            content = source.get("content", "")
-            path = source.get("path", "粘贴的文本")
-            if not content:
-                continue
-            if total_chars + len(content) > max_chars:
-                remaining = max_chars - total_chars
-                if remaining > 100:
-                    content = content[:remaining] + "\n...(内容已截断)"
-                else:
-                    break
-            section = f"### 来源: {path}\n```\n{content}\n```"
-            sections.append(section)
-            total_chars += len(content)
-        return "\n\n".join(sections)
-
     def truncate_content(self, content: str, max_tokens: int | None = None) -> str:
         max_chars = int((max_tokens or self.max_file_tokens) * self.chars_per_token)
 
@@ -453,9 +398,13 @@ class ContextBuilder:
         else:
             combined = f"讨论开始：\n{new_summary}"
 
-        max_chars = self.max_summary_tokens * self.chars_per_token
+        max_chars = int(self.max_summary_tokens * self.chars_per_token)
         if len(combined) > max_chars:
-            combined = combined[-max_chars:]
+            head_budget = int(max_chars * 0.3)
+            tail_budget = max_chars - head_budget
+            head = combined[:head_budget]
+            tail = combined[-tail_budget:]
+            combined = head + "\n\n...(中间内容已省略)...\n\n" + tail
 
         return combined
 

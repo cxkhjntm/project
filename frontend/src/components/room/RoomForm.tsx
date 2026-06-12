@@ -23,6 +23,8 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
   const [mode, setMode] = useState<RoomMode>('code_document');
   const [outputDirectory, setOutputDirectory] = useState('');
   const [roundLimit, setRoundLimit] = useState(5);
+  const [agreementThreshold, setAgreementThreshold] = useState(85);
+  const [conflictThreshold, setConflictThreshold] = useState(5);
   const [selectedParticipants, setSelectedParticipants] = useState<Map<string, string>>(new Map());
 
   const [roleCards, setRoleCards] = useState<RoleCard[]>([]);
@@ -80,6 +82,8 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
       mode,
       output_directory: outputDirectory,
       round_limit: roundLimit,
+      convergence_agreement_threshold: agreementThreshold,
+      convergence_conflict_threshold: conflictThreshold,
       participants,
     });
   };
@@ -173,6 +177,71 @@ export default function RoomForm({ onSubmit, onCancel, isSubmitting }: RoomFormP
           />
         </div>
       </div>
+
+      <details className="border border-slate-200/70 rounded-lg p-4 bg-slate-50/40">
+        <summary className="cursor-pointer text-sm font-medium text-gray-700">
+          高级设置
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              方向整体同意度阈值: {agreementThreshold}
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={50}
+                max={100}
+                value={agreementThreshold}
+                onChange={e => setAgreementThreshold(Number(e.target.value))}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                min={50}
+                max={100}
+                value={agreementThreshold}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  if (v >= 50 && v <= 100) setAgreementThreshold(v);
+                }}
+                className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              方案冲突度阈值: {conflictThreshold}
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={50}
+                value={conflictThreshold}
+                onChange={e => setConflictThreshold(Number(e.target.value))}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={conflictThreshold}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  if (v >= 0 && v <= 50) setConflictThreshold(v);
+                }}
+                className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500">
+            当专家方向整体同意度不低于设定值，且方案冲突度不高于设定值时，讨论才会自动收敛结束。
+          </p>
+        </div>
+      </details>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">

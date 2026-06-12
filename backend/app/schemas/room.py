@@ -29,6 +29,14 @@ class RoomCreate(BaseModel):
         ..., min_length=1, max_length=500, description="Output directory path"
     )
     round_limit: int = Field(5, ge=1, le=20, description="Maximum discussion rounds")
+    convergence_agreement_threshold: int = Field(
+        85, ge=50, le=100, description="Direction agreement threshold"
+    )
+    convergence_conflict_threshold: int = Field(
+        5, ge=0, le=50, description="Solution conflict threshold"
+    )
+    convergence_provider_id: str | None = Field(None, max_length=36)
+    convergence_model_override: str | None = Field(None, max_length=100)
     participants: list[ParticipantInput] = Field(..., min_length=1, description="Room participants")
 
 
@@ -40,6 +48,10 @@ class RoomUpdate(BaseModel):
     mode: Literal["code_document", "document", "code"] | None = None
     output_directory: str | None = Field(None, min_length=1, max_length=500)
     round_limit: int | None = Field(None, ge=1, le=20)
+    convergence_agreement_threshold: int | None = Field(None, ge=50, le=100)
+    convergence_conflict_threshold: int | None = Field(None, ge=0, le=50)
+    convergence_provider_id: str | None = Field(None, max_length=36)
+    convergence_model_override: str | None = Field(None, max_length=100)
 
 
 class ParticipantResponse(BaseModel):
@@ -67,6 +79,10 @@ class RoomResponse(BaseModel):
     strategy: str
     output_directory: str
     round_limit: int
+    convergence_agreement_threshold: int
+    convergence_conflict_threshold: int
+    convergence_provider_id: str | None = None
+    convergence_model_override: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime

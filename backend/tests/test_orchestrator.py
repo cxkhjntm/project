@@ -6,13 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.orchestrator import (
-    CONVERGENCE_KEYWORDS,
     DiscussionState,
     Orchestrator,
     SSEEventType,
-    check_convergence,
     parse_host_action,
 )
+from app.services.convergence_judge import ConvergenceResult
 
 
 @pytest.mark.asyncio
@@ -647,50 +646,17 @@ def test_parse_host_action_none():
     assert action is None
 
 
-def test_check_convergence_with_keywords():
-    """Test convergence detection with keywords."""
-    messages = [
-        {"round": 1, "sender_type": "expert", "content": "我同意这个方案"},
-        {"round": 1, "sender_type": "expert", "content": "没有异议，可行"},
-    ]
-    assert check_convergence(messages) is True
-
-
-def test_check_convergence_without_keywords():
-    """Test no convergence when keywords absent."""
-    messages = [
-        {"round": 1, "sender_type": "expert", "content": "我觉得还需要讨论"},
-        {"round": 1, "sender_type": "expert", "content": "有不同意见"},
-    ]
-    assert check_convergence(messages) is False
-
-
-def test_check_convergence_insufficient_messages():
-    """Test no convergence with fewer than 2 expert messages."""
-    messages = [
-        {"round": 1, "sender_type": "expert", "content": "同意"},
-    ]
-    assert check_convergence(messages) is False
-
-
-def test_convergence_keywords_preserved():
-    """Test that CONVERGENCE_KEYWORDS is preserved."""
-    assert "可行" in CONVERGENCE_KEYWORDS
-    assert "同意" in CONVERGENCE_KEYWORDS
-    assert "没有异议" in CONVERGENCE_KEYWORDS
-    assert "LGTM" in CONVERGENCE_KEYWORDS
-
-
-def test_check_convergence_function_preserved():
-    """Test that check_convergence function is preserved."""
-    assert callable(check_convergence)
-    # Should work with empty list
-    assert check_convergence([]) is False
+def test_parse_host_action_continue():
+    """Test parsing ACTION: continue from host message."""
+    content = "请大家继续补充风险点，ACTION: continue"
+    action = parse_host_action(content)
+    assert action is not None
+    assert action["type"] == "continue"
 
 
 @pytest.mark.asyncio
-async def test_action_converge_stops_discussion():
-    """Test that ACTION: converge stops discussion immediately."""
+async def test_action_converge_stops_after_judge_confirms():
+    """ACTION: converge only stops after the convergence judge confirms."""
     mock_session = AsyncMock()
     mock_on_event = AsyncMock()
     room = MagicMock(
@@ -720,17 +686,19 @@ async def test_action_converge_stops_discussion():
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
     orchestrator.load_shared_sources = AsyncMock()
+    orchestrator._check_convergence = AsyncMock(return_value=True)
 
     result = await orchestrator.run_discussion()
 
     assert result["success"] is True
     assert result["total_rounds"] == 1
     assert orchestrator._run_expert_turn.call_count == 1
+    orchestrator._check_convergence.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_action_synthesize_stops_discussion():
-    """Test that ACTION: synthesize stops discussion immediately."""
+async def test_action_synthesize_stops_after_judge_confirms():
+    """ACTION: synthesize only stops after the convergence judge confirms."""
     mock_session = AsyncMock()
     mock_on_event = AsyncMock()
     room = MagicMock(
@@ -760,11 +728,54 @@ async def test_action_synthesize_stops_discussion():
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
     orchestrator.load_shared_sources = AsyncMock()
+    orchestrator._check_convergence = AsyncMock(return_value=True)
 
     result = await orchestrator.run_discussion()
 
     assert result["success"] is True
     assert result["total_rounds"] == 1
+    orchestrator._check_convergence.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_action_converge_continues_when_judge_disagrees():
+    """Host convergence suggestions should not end the discussion without confirmation."""
+    mock_session = AsyncMock()
+    mock_on_event = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=2,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(
+                    base_url="http://test.com",
+                    default_model="gpt-4",
+                ),
+            )
+        ],
+    )
+
+    orchestrator = Orchestrator(
+        session=mock_session,
+        room=room,
+        on_event=mock_on_event,
+    )
+
+    orchestrator._run_orchestrator_turn = AsyncMock(return_value="讨论充分，ACTION: converge")
+    orchestrator._run_expert_turn = AsyncMock()
+    orchestrator._update_rolling_summary = AsyncMock()
+    orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
+    orchestrator.load_shared_sources = AsyncMock()
+    orchestrator._check_convergence = AsyncMock(return_value=False)
+
+    result = await orchestrator.run_discussion()
+
+    assert result["success"] is True
+    assert result["total_rounds"] == 2
+    assert orchestrator._run_expert_turn.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -819,8 +830,8 @@ async def test_action_focus_runs_all_experts_with_focused_first():
 
 
 @pytest.mark.asyncio
-async def test_keyword_fallback_when_no_action():
-    """Test keyword matching fallback when no ACTION is present."""
+async def test_no_keyword_fallback_when_no_action():
+    """Keyword-like expert messages should not stop discussion without judge approval."""
     mock_session = AsyncMock()
     mock_on_event = AsyncMock()
     room = MagicMock(
@@ -858,6 +869,7 @@ async def test_keyword_fallback_when_no_action():
     orchestrator._update_rolling_summary = AsyncMock()
     orchestrator._auto_generate_artifact = AsyncMock(return_value=None)
     orchestrator.load_shared_sources = AsyncMock()
+    orchestrator._check_convergence = AsyncMock(return_value=False)
 
     call_count = 0
 
@@ -871,6 +883,7 @@ async def test_keyword_fallback_when_no_action():
     result = await orchestrator.run_discussion()
 
     assert result["success"] is True
+    orchestrator._check_convergence.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -948,14 +961,66 @@ async def test_min_2_rounds_before_convergence():
     ]
 
     # _check_convergence should return False because current_round < 2
-    assert orchestrator._check_convergence() is False
+    assert await orchestrator._check_convergence() is False
 
 
-def test_check_convergence_requires_expert_messages():
-    """Test that convergence only counts expert messages."""
-    messages = [
-        {"round": 1, "sender_type": "orchestrator", "content": "同意"},
-        {"round": 1, "sender_type": "orchestrator", "content": "没有异议"},
+@pytest.mark.asyncio
+async def test_llm_convergence_judge_result_controls_convergence():
+    """LLM judge scores control convergence decisions."""
+    mock_session = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=5,
+        participants=[
+            MagicMock(
+                role_card_id="role-1",
+                provider_id="provider-1",
+                provider=MagicMock(base_url="http://test.com", default_model="gpt-4"),
+            )
+        ],
+    )
+    orchestrator = Orchestrator(session=mock_session, room=room)
+    orchestrator.current_round = 2
+    orchestrator.all_messages = [
+        {"round": 2, "sender_type": "expert", "sender_id": "A", "content": "方向一致"},
+        {"round": 2, "sender_type": "expert", "sender_id": "B", "content": "没有冲突"},
     ]
-    # Should fail because no expert messages
-    assert check_convergence(messages) is False
+
+    judge = MagicMock()
+    judge.judge = AsyncMock(
+        return_value=ConvergenceResult(
+            agreement_score=90,
+            conflict_score=0,
+            should_converge=True,
+            reasoning="方向一致",
+        )
+    )
+    with patch("app.services.convergence_judge.ConvergenceJudge", return_value=judge):
+        assert await orchestrator._check_convergence() is True
+
+    judge.judge.assert_awaited_once()
+    assert judge.judge.await_args.kwargs["fallback_provider_id"] == "provider-1"
+
+
+@pytest.mark.asyncio
+async def test_llm_convergence_judge_failure_continues():
+    """Convergence judge failures should degrade to continuing discussion."""
+    mock_session = AsyncMock()
+    room = MagicMock(
+        id="room-1",
+        goal="Test goal",
+        round_limit=5,
+        participants=[MagicMock(role_card_id="role-1", provider_id="provider-1")],
+    )
+    orchestrator = Orchestrator(session=mock_session, room=room)
+    orchestrator.current_round = 2
+    orchestrator.all_messages = [
+        {"round": 2, "sender_type": "expert", "sender_id": "A", "content": "同意"},
+        {"round": 2, "sender_type": "expert", "sender_id": "B", "content": "可行"},
+    ]
+
+    judge = MagicMock()
+    judge.judge = AsyncMock(side_effect=RuntimeError("api unavailable"))
+    with patch("app.services.convergence_judge.ConvergenceJudge", return_value=judge):
+        assert await orchestrator._check_convergence() is False

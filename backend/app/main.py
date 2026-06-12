@@ -10,7 +10,16 @@ from app.config import settings
 from app.database import async_session_factory, init_db, migrate_compat_schema
 from app.middleware.error_handler import ErrorHandlerMiddleware, http_exception_handler
 from app.models import *  # noqa: F401, F403 - ensure all models registered with Base
-from app.routers import artifacts, discussion, filesystem, providers, role_cards, rooms, sources
+from app.routers import (
+    artifacts,
+    discussion,
+    filesystem,
+    providers,
+    role_cards,
+    rooms,
+    settings as settings_router,
+    sources,
+)
 from app.seed.loader import load_builtin_roles
 from app.services.model_client import close_global_client
 from app.utils.logger import get_logger, setup_logging
@@ -67,6 +76,7 @@ def create_app(lifespan_fn: AsyncIterator[None] | None = None) -> FastAPI:
     app.include_router(discussion.router)
     app.include_router(artifacts.router)
     app.include_router(filesystem.router)
+    app.include_router(settings_router.router)
 
     @app.get("/api/health")
     async def health_check() -> dict[str, str]:
